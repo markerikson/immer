@@ -191,6 +191,14 @@ function finalizeWithCallbacksIntegrated(
 		handleValue(result, rootScope.handledSet_, rootScope)
 	}
 
+	if (
+		!rootScope.parent_ &&
+		rootScope.immer_.autoFreeze_ &&
+		rootScope.canAutoFreeze_
+	) {
+		maybeFreeze(rootScope, state.base_, true)
+	}
+
 	// Preserve existing freezing logic
 	maybeFreeze(rootScope, result, false)
 
