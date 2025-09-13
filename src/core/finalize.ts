@@ -17,7 +17,8 @@ import {
 	revokeScope,
 	isFrozen,
 	isMap,
-	prepareCopy
+	prepareCopy,
+	MapState
 } from "../internal"
 
 export function processResult(result: any, scope: ImmerScope) {
@@ -118,6 +119,30 @@ function finalizeWithCallbacksIntegrated(
 				result.add(finalizedValue)
 			} else {
 				result.add(value)
+			}
+		})
+	}
+	if (state.type_ === ArchType.Map) {
+		// Handle Map finalization similar to Set
+		// const mapState = state as MapState
+		// if (mapState.assigned_) {
+		// 	mapState.assigned_.forEach((assigned, key) => {
+		// 		if (assigned) {
+		// 			const value = result.get(key)
+		// 			if (isDraft(value)) {
+		// 				const finalizedValue = finalizeAlternate(rootScope, value)
+		// 				result.set(key, finalizedValue)
+		// 			}
+		// 		}
+		// 	})
+		// }
+		const mapCopy = result as Map<any, any>
+		const entries = Array.from(mapCopy.entries()) // Snapshot to avoid iteration issues
+
+		entries.forEach(([key, value]) => {
+			if (isDraft(value)) {
+				const finalizedValue = finalizeAlternate(rootScope, value)
+				mapCopy.set(key, finalizedValue)
 			}
 		})
 	}

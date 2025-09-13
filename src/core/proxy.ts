@@ -53,6 +53,7 @@ type ProxyState = ProxyObjectState | ProxyArrayState
  * The second argument is the parent draft-state (used internally).
  */
 export function createProxyProxy<T extends Objectish>(
+	rootScope: ImmerScope,
 	base: T,
 	parent?: ImmerState,
 	key?: string | number | symbol
@@ -86,7 +87,7 @@ export function createProxyProxy<T extends Objectish>(
 	}
 
 	if (parent && key !== undefined) {
-		registerChildFinalizationCallback(parent, state, key)
+		registerChildFinalizationCallback(rootScope, parent, state, key)
 	}
 
 	// the traps must target something, a bit like the 'real' base.
@@ -129,7 +130,7 @@ export const objectTraps: ProxyHandler<ProxyState> = {
 		if (value === peek(state.base_, prop)) {
 			prepareCopy(state)
 			// return (state.copy_![prop as any] = createProxy(value, state))
-			const childDraft = createProxy(value, state, prop) // Pass key
+			const childDraft = createProxy(state.scope_, value, state, prop) // Pass key
 			return (state.copy_![prop as any] = childDraft)
 		}
 		return value
@@ -330,7 +331,7 @@ function handleCrossReference(
 				if (targetCopy[key] === value) {
 					let finalizedValue
 					if (valueDraft.operated_) {
-						finalizedValue = finalizeWithCallbacks(valueDraft)
+						finalizedValue = finalizeWithCallbacks(valueDraft, target.scope_)
 					} else {
 						finalizedValue = valueDraft.base_
 					}

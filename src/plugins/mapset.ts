@@ -34,7 +34,11 @@ export function enableMapSet() {
 				base_: target,
 				draft_: this as any,
 				isManual_: false,
-				revoked_: false
+				revoked_: false,
+
+				operated_: false,
+				callbacks_: [],
+				key_: undefined // Maps don't have keys in their parent
 			}
 		}
 
@@ -109,7 +113,7 @@ export function enableMapSet() {
 				return value // either already drafted or reassigned
 			}
 			// despite what it looks, this creates a draft only once, see above condition
-			const draft = createProxy(value, state)
+			const draft = createProxy(state.scope_, value, state, key)
 			prepareMapCopy(state)
 			state.copy_!.set(key, draft)
 			return draft
@@ -185,7 +189,11 @@ export function enableMapSet() {
 				draft_: this,
 				drafts_: new Map(),
 				revoked_: false,
-				isManual_: false
+				isManual_: false,
+
+				operated_: false,
+				callbacks_: [],
+				key_: undefined // Sets don't have keys in their parent
 			}
 		}
 
@@ -286,7 +294,7 @@ export function enableMapSet() {
 			state.copy_ = new Set()
 			state.base_.forEach(value => {
 				if (isDraftable(value)) {
-					const draft = createProxy(value, state)
+					const draft = createProxy(state.scope_, value, state)
 					state.drafts_.set(value, draft)
 					state.copy_!.add(draft)
 				} else {

@@ -23,7 +23,8 @@ import {
 	getCurrentScope,
 	NOTHING,
 	freeze,
-	current
+	current,
+	ImmerScope
 } from "../internal"
 
 interface ProducersFns {
@@ -95,7 +96,7 @@ export class Immer implements ProducersFns {
 		// Only plain objects, arrays, and "immerable classes" are drafted.
 		if (isDraftable(base)) {
 			const scope = enterScope(this)
-			const proxy = createProxy(base, undefined)
+			const proxy = createProxy(scope, base, undefined)
 			let hasError = true
 			try {
 				result = recipe(proxy)
@@ -141,7 +142,7 @@ export class Immer implements ProducersFns {
 		if (!isDraftable(base)) die(8)
 		if (isDraft(base)) base = current(base)
 		const scope = enterScope(this)
-		const proxy = createProxy(base, undefined)
+		const proxy = createProxy(scope, base, undefined)
 		proxy[DRAFT_STATE].isManual_ = true
 		leaveScope(scope)
 		return proxy as any
@@ -220,15 +221,17 @@ export class Immer implements ProducersFns {
 }
 
 export function createProxy<T extends Objectish>(
+	rootScope: ImmerScope,
 	value: T,
-	parent?: ImmerState
+	parent?: ImmerState,
+	key?: string | number | symbol
 ): Drafted<T, ImmerState> {
 	// precondition: createProxy should be guarded by isDraftable, so we know we can safely draft
 	const draft: Drafted = isMap(value)
 		? getPlugin("MapSet").proxyMap_(value, parent)
 		: isSet(value)
 		? getPlugin("MapSet").proxySet_(value, parent)
-		: createProxyProxy(value, parent)
+		: createProxyProxy(rootScope, value, parent, key)
 
 	const scope = parent ? parent.scope_ : getCurrentScope()
 	scope.drafts_.push(draft)
