@@ -16,7 +16,8 @@ import {
 	die,
 	revokeScope,
 	isFrozen,
-	isMap
+	isMap,
+	prepareCopy
 } from "../internal"
 
 export function processResult(result: any, scope: ImmerScope) {
@@ -30,7 +31,7 @@ export function processResult(result: any, scope: ImmerScope) {
 		}
 		if (isDraftable(result)) {
 			// Finalize the result in case it contains (or is) a subset of the draft.
-			result = finalize(scope, result)
+			result = finalizeAlternate(scope, result)
 			if (!scope.parent_) maybeFreeze(scope, result)
 		}
 		if (scope.patches_) {
@@ -43,13 +44,106 @@ export function processResult(result: any, scope: ImmerScope) {
 		}
 	} else {
 		// Finalize the base draft.
-		result = finalize(scope, baseDraft, [])
+		result = finalizeAlternate(scope, baseDraft, [])
 	}
 	revokeScope(scope)
 	if (scope.patches_) {
 		scope.patchListener_!(scope.patches_, scope.inversePatches_!)
 	}
 	return result !== NOTHING ? result : undefined
+}
+
+function finalizeAlternate(
+	rootScope: ImmerScope,
+	value: any,
+	path?: PatchPath
+) {
+	// Don't recurse in tho recursive data structures
+	if (isFrozen(value)) return value
+
+	const state: ImmerState = value[DRAFT_STATE]
+	// A plain object, might need freezing, might contain drafts
+	if (!state) {
+		// Initialize handledSet if not present
+		if (!rootScope.handledSet_) {
+			rootScope.handledSet_ = new WeakSet()
+		}
+		// REPLACE tree traversal with enhanced non-draft handling
+		handleNonDraftValue(value, rootScope.handledSet_, rootScope)
+		return value
+	}
+	// Never finalize drafts owned by another scope - PRESERVE
+	if (state.scope_ !== rootScope) return value
+	// Unmodified draft, return the (frozen) original - PRESERVE
+	if (!state.modified_) {
+		maybeFreeze(rootScope, state.base_, true)
+		return state.base_
+	}
+	// REPLACE: Not finalized yet, use callback-based finalization
+	if (!state.finalized_) {
+		// Use callback-based finalization instead of tree traversal
+		return finalizeWithCallbacksIntegrated(rootScope, state, path)
+	}
+	return state.copy_
+}
+
+function finalizeWithCallbacksIntegrated(
+	rootScope: ImmerScope,
+	state: ImmerState,
+	path?: PatchPath
+): any {
+	// Mark as finalized and decrement counter (preserve existing logic)
+	state.finalized_ = true
+	state.scope_.unfinalizedDrafts_--
+
+	// Execute all registered callbacks (NEW: callback-based finalization)
+	if (state.callbacks_) {
+		while (state.callbacks_.length > 0) {
+			const callback = state.callbacks_.pop()!
+			callback()
+		}
+	}
+
+	// Get the result copy
+	const result = state.copy_
+
+	// Handle Set finalization (preserve existing logic but without finalizeProperty)
+	if (state.type_ === ArchType.Set) {
+		const resultEach = new Set(result)
+		result.clear()
+		resultEach.forEach(value => {
+			if (isDraft(value)) {
+				// Use callback-based finalization instead of finalizeProperty
+				const finalizedValue = finalizeAlternate(rootScope, value)
+				result.add(finalizedValue)
+			} else {
+				result.add(value)
+			}
+		})
+	}
+
+	// Handle non-draft objects that might contain drafts (REPLACES finalizeProperty)
+	if (!rootScope.handledSet_) {
+		rootScope.handledSet_ = new WeakSet()
+	}
+	if (result) {
+		handleNonDraftValue(result, rootScope.handledSet_, rootScope)
+	}
+
+	// Preserve existing freezing logic
+	maybeFreeze(rootScope, result, false)
+
+	// Preserve existing patch generation logic
+	if (path && rootScope.patches_) {
+		getPlugin("Patches").generatePatches_(
+			state,
+			path,
+			rootScope.patches_,
+			rootScope.inversePatches_!
+		)
+	}
+
+	return result
 }
 
 function finalize(rootScope: ImmerScope, value: any, path?: PatchPath) {
@@ -200,4 +294,105 @@ function maybeFreeze(scope: ImmerScope, value: any, deep = false) {
 	if (!scope.parent_ && scope.immer_.autoFreeze_ && scope.canAutoFreeze_) {
 		freeze(value, deep)
 	}
+}
+
+export function registerChildFinalizationCallback(
+	rootScope: ImmerScope,
+	parent: ImmerState,
+	child: ImmerState,
+	key: string | number | symbol
+) {
+	if (!parent.callbacks_) {
+		parent.callbacks_ = []
+	}
+
+	parent.callbacks_.push(() => {
+		// Get current value from parent's copy
+		const parentCopy = parent.copy_ || parent.base_
+		const currentValue = parentCopy[key]
+
+		// Check if it's still our child draft
+		if (currentValue && currentValue[DRAFT_STATE] === child) {
+			// Determine final value based on child's operated status
+			let finalValue
+			if (child.operated_) {
+				// Child was modified, use finalized copy
+				finalValue = finalizeWithCallbacks(child, rootScope)
+			} else {
+				// Child was not modified, use original
+				finalValue = child.base_
+			}
+
+			// Update parent's copy with finalized value
+			if (!parent.copy_) {
+				prepareCopy(parent)
+			}
+			parent.copy_![key] = finalValue
+		}
+	})
+}
+
+export function finalizeWithCallbacks(
+	state: ImmerState,
+	rootScope: ImmerScope
+): any {
+	// Early return for unmodified drafts
+	if (!state.operated_) {
+		return state.base_
+	}
+
+	// Prevent double finalization
+	if (state.finalized_) {
+		return state.copy_
+	}
+
+	// Execute all registered callbacks
+	if (state.callbacks_) {
+		while (state.callbacks_.length > 0) {
+			const callback = state.callbacks_.pop()!
+			callback()
+		}
+	}
+
+	// Mark as finalized
+	state.finalized_ = true
+
+	// Handle non-draft objects that might contain drafts
+	if (state.copy_) {
+		handleNonDraftValue(state.copy_, state.scope_.handledSet_, rootScope)
+	}
+
+	return state.copy_ || state.base_
+}
+
+function handleNonDraftValue(
+	target: any,
+	handledSet: WeakSet<any>,
+	rootScope: ImmerScope
+) {
+	// Skip if already handled, frozen, or not draftable
+	if (handledSet.has(target) || isFrozen(target) || !isDraftable(target)) {
+		return
+	}
+
+	handledSet.add(target)
+
+	each(target, (key, value) => {
+		if (isDraft(value)) {
+			const valueDraft = value[DRAFT_STATE]
+			if (valueDraft.scope_ === rootScope) {
+				// Replace draft with finalized value
+				let finalizedValue
+				if (valueDraft.operated_) {
+					finalizedValue = finalizeWithCallbacks(valueDraft, rootScope)
+				} else {
+					finalizedValue = valueDraft.base_
+				}
+				target[key] = finalizedValue
+			}
+		} else if (isDraftable(value)) {
+			// Recursively handle nested objects
+			handleNonDraftValue(value, handledSet, rootScope)
+		}
+	})
 }

@@ -17,7 +17,10 @@ import {
 	die,
 	createProxy,
 	ArchType,
-	ImmerScope
+	ImmerScope,
+	registerChildFinalizationCallback,
+	isDraft,
+	finalizeWithCallbacks
 } from "../internal"
 
 interface ProxyBaseState extends ImmerBaseState {
@@ -51,7 +54,8 @@ type ProxyState = ProxyObjectState | ProxyArrayState
  */
 export function createProxyProxy<T extends Objectish>(
 	base: T,
-	parent?: ImmerState
+	parent?: ImmerState,
+	key?: string | number | symbol
 ): Drafted<T, ProxyState> {
 	const isArray = Array.isArray(base)
 	const state: ProxyState = {
@@ -74,7 +78,15 @@ export function createProxyProxy<T extends Objectish>(
 		copy_: null,
 		// Called by the `produce` function.
 		revoke_: null as any,
-		isManual_: false
+		isManual_: false,
+		// New callback system fields
+		operated_: false,
+		callbacks_: [],
+		key_: key
+	}
+
+	if (parent && key !== undefined) {
+		registerChildFinalizationCallback(parent, state, key)
 	}
 
 	// the traps must target something, a bit like the 'real' base.
@@ -116,7 +128,9 @@ export const objectTraps: ProxyHandler<ProxyState> = {
 		// Assigned values are never drafted. This catches any drafts we created, too.
 		if (value === peek(state.base_, prop)) {
 			prepareCopy(state)
-			return (state.copy_![prop as any] = createProxy(value, state))
+			// return (state.copy_![prop as any] = createProxy(value, state))
+			const childDraft = createProxy(value, state, prop) // Pass key
+			return (state.copy_![prop as any] = childDraft)
 		}
 		return value
 	},
@@ -167,6 +181,9 @@ export const objectTraps: ProxyHandler<ProxyState> = {
 		// @ts-ignore
 		state.copy_![prop] = value
 		state.assigned_[prop] = true
+
+		// Handle cross-draft references (equivalent to Mutative's markFinalization)
+		handleCrossReference(state, prop, value)
 		return true
 	},
 	deleteProperty(state, prop: string) {
@@ -272,6 +289,8 @@ function getDescriptorFromProto(
 export function markChanged(state: ImmerState) {
 	if (!state.modified_) {
 		state.modified_ = true
+		// Set operated flag for callback system
+		state.operated_ = true
 		if (state.parent_) {
 			markChanged(state.parent_)
 		}
@@ -288,5 +307,40 @@ export function prepareCopy(state: {
 			state.base_,
 			state.scope_.immer_.useStrictShallowCopy_
 		)
+	}
+}
+
+function handleCrossReference(
+	target: ImmerState,
+	key: string | number | symbol,
+	value: any
+) {
+	// Check if value is a draft from this scope
+	if (isDraft(value)) {
+		const valueDraft = value[DRAFT_STATE]
+		if (valueDraft.scope_ === target.scope_) {
+			// Register callback to update this location when the draft finalizes
+			if (!valueDraft.callbacks_) {
+				valueDraft.callbacks_ = []
+			}
+
+			valueDraft.callbacks_.push(() => {
+				// Update the target location with finalized value
+				const targetCopy = target.copy_ || target.base_
+				if (targetCopy[key] === value) {
+					let finalizedValue
+					if (valueDraft.operated_) {
+						finalizedValue = finalizeWithCallbacks(valueDraft)
+					} else {
+						finalizedValue = valueDraft.base_
+					}
+
+					if (!target.copy_) {
+						prepareCopy(target)
+					}
+					target.copy_![key] = finalizedValue
+				}
+			})
+		}
 	}
 }

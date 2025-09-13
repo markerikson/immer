@@ -20,6 +20,10 @@ export interface ImmerScope {
 	patchListener_?: PatchListener
 	immer_: Immer
 	unfinalizedDrafts_: number
+
+	// New callback system fields
+	finalizationCallbacks_: (() => void)[] // Root-level callbacks
+	handledSet_: WeakSet<any> // Prevent duplicate processing
 }
 
 let currentScope: ImmerScope | undefined
@@ -39,7 +43,11 @@ function createScope(
 		// Whenever the modified draft contains a draft from another scope, we
 		// need to prevent auto-freezing so the unowned draft can be finalized.
 		canAutoFreeze_: true,
-		unfinalizedDrafts_: 0
+		unfinalizedDrafts_: 0,
+
+		// Initialize callback system fields
+		finalizationCallbacks_: [],
+		handledSet_: new WeakSet()
 	}
 }
 

@@ -28,6 +28,11 @@ export interface ImmerBaseState {
 	modified_: boolean
 	finalized_: boolean
 	isManual_: boolean
+
+	// New callback system fields
+	operated_?: boolean // Equivalent to Mutative's operated flag
+	callbacks_?: (() => void)[] // Child finalization callbacks
+	key_?: string | number | symbol // Property key in parent
 }
 
 export type ImmerState =
