@@ -499,8 +499,18 @@ function handleValue(
 		!isDraftable(target) ||
 		handledSet.has(target) ||
 		isFrozen(target)
-	)
+	) {
 		return
+	}
+
+	if (!rootScope.immer_.autoFreeze_ && rootScope.unfinalizedDrafts_ < 1) {
+		// optimization: if an object is not a draft, and we don't have to
+		// deepfreeze everything, and we are sure that no drafts are left in the remaining object
+		// cause we saw and finalized all drafts already; we can stop visiting the rest of the tree.
+		// This benefits especially adding large data tree's without further processing.
+		// See add-data.js perf test
+		return
+	}
 
 	const isSet = target instanceof Set
 	const isMap = target instanceof Map
