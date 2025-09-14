@@ -82,7 +82,8 @@ export function enterScope(immer: Immer) {
 
 function revokeDraft(draft: Drafted) {
 	const state: ImmerState = draft[DRAFT_STATE]
-	if (state.type_ === ArchType.Object || state.type_ === ArchType.Array)
-		state.revoke_()
-	else state.revoked_ = true
+	// if (state.type_ === ArchType.Object || state.type_ === ArchType.Array)
+	// 	state.revoke_()
+	// else state.revoked_ = true
+	state.revoked_ = true
 }

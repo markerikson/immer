@@ -29,6 +29,7 @@ interface ProxyBaseState extends ImmerBaseState {
 	}
 	parent_?: ImmerState
 	revoke_(): void
+	revoked_: boolean
 }
 
 export interface ProxyObjectState extends ProxyBaseState {
@@ -81,13 +82,10 @@ export function createProxyProxy<T extends Objectish>(
 		revoke_: null as any,
 		isManual_: false,
 		// New callback system fields
-		operated_: false,
+		// operated_: false,
 		callbacks_: [],
-		key_: key
-	}
-
-	if (parent && key !== undefined) {
-		registerChildFinalizationCallback(rootScope, parent, state, key)
+		key_: key,
+		revoked_: false
 	}
 
 	// the traps must target something, a bit like the 'real' base.
@@ -106,6 +104,17 @@ export function createProxyProxy<T extends Objectish>(
 	const {revoke, proxy} = Proxy.revocable(target, traps)
 	state.draft_ = proxy as any
 	state.revoke_ = revoke
+
+	if (parent && key !== undefined) {
+		registerChildFinalizationCallback(rootScope, parent, state, key)
+	} else {
+		// It's a root draft, register it with the scope
+		state.callbacks_ = []
+		state.callbacks_.push(() => {
+			console.log("Finalizing root draft", state)
+		})
+	}
+
 	return proxy as any
 }
 
@@ -114,6 +123,12 @@ export function createProxyProxy<T extends Objectish>(
  */
 export const objectTraps: ProxyHandler<ProxyState> = {
 	get(state, prop) {
+		if (state.revoked_) {
+			console.trace("Cannot access a proxy that was revoked!", {state, prop})
+			throw new Error(
+				"Cannot access a proxy that was revoked! " + JSON.stringify(prop)
+			)
+		}
 		if (prop === DRAFT_STATE) return state
 
 		const source = latest(state)
@@ -291,7 +306,7 @@ export function markChanged(state: ImmerState) {
 	if (!state.modified_) {
 		state.modified_ = true
 		// Set operated flag for callback system
-		state.operated_ = true
+		// state.operated_ = true
 		if (state.parent_) {
 			markChanged(state.parent_)
 		}

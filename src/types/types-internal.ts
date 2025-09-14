@@ -30,7 +30,7 @@ export interface ImmerBaseState {
 	isManual_: boolean
 
 	// New callback system fields
-	operated_?: boolean // Equivalent to Mutative's operated flag
+	// operated_?: boolean // Equivalent to Mutative's operated flag
 	callbacks_?: (() => void)[] // Child finalization callbacks
 	key_?: string | number | symbol // Property key in parent
 }

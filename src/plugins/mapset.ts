@@ -14,7 +14,8 @@ import {
 	markChanged,
 	die,
 	ArchType,
-	each
+	each,
+	registerChildFinalizationCallback
 } from "../internal"
 
 export function enableMapSet() {
@@ -36,7 +37,7 @@ export function enableMapSet() {
 				isManual_: false,
 				revoked_: false,
 
-				operated_: false,
+				// operated_: false,
 				callbacks_: [],
 				key_: undefined // Maps don't have keys in their parent
 			}
@@ -114,6 +115,12 @@ export function enableMapSet() {
 			}
 			// despite what it looks, this creates a draft only once, see above condition
 			const draft = createProxy(state.scope_, value, state, key)
+			// registerChildFinalizationCallback(
+			// 	state.scope_,
+			// 	state,
+			// 	draft[DRAFT_STATE],
+			// 	key
+			// )
 			prepareMapCopy(state)
 			state.copy_!.set(key, draft)
 			return draft
@@ -191,7 +198,7 @@ export function enableMapSet() {
 				revoked_: false,
 				isManual_: false,
 
-				operated_: false,
+				// operated_: false,
 				callbacks_: [],
 				key_: undefined // Sets don't have keys in their parent
 			}
@@ -295,6 +302,12 @@ export function enableMapSet() {
 			state.base_.forEach(value => {
 				if (isDraftable(value)) {
 					const draft = createProxy(state.scope_, value, state)
+					// registerChildFinalizationCallback(
+					// 	state.scope_,
+					// 	state,
+					// 	draft[DRAFT_STATE],
+					// 	value
+					// )
 					state.drafts_.set(value, draft)
 					state.copy_!.add(draft)
 				} else {
