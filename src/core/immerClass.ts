@@ -24,7 +24,8 @@ import {
 	NOTHING,
 	freeze,
 	current,
-	ImmerScope
+	ImmerScope,
+	registerChildFinalizationCallback
 } from "../internal"
 
 interface ProducersFns {
@@ -226,6 +227,7 @@ export function createProxy<T extends Objectish>(
 	parent?: ImmerState,
 	key?: string | number | symbol
 ): Drafted<T, ImmerState> {
+	// console.log("createProxy: ", {key})
 	// precondition: createProxy should be guarded by isDraftable, so we know we can safely draft
 	const draft: Drafted = isMap(value)
 		? getPlugin("MapSet").proxyMap_(value, parent)
@@ -235,5 +237,21 @@ export function createProxy<T extends Objectish>(
 
 	const scope = parent ? parent.scope_ : getCurrentScope()
 	scope.drafts_.push(draft)
+	const state: ImmerState = draft[DRAFT_STATE]
+
+	if (parent && key !== undefined) {
+		// console.log("Registering child finalization callback", {
+		// 	key
+		// 	// value
+		// })
+		registerChildFinalizationCallback(rootScope, parent, state, key)
+	} else {
+		// It's a root draft, register it with the scope
+		state.callbacks_ = []
+		state.callbacks_.push(() => {
+			// console.log("Finalizing root draft")
+		})
+	}
+
 	return draft
 }

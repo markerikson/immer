@@ -15,7 +15,8 @@ import {
 	die,
 	ArchType,
 	each,
-	registerChildFinalizationCallback
+	registerChildFinalizationCallback,
+	ImmerScope
 } from "../internal"
 
 export function enableMapSet() {
@@ -41,6 +42,7 @@ export function enableMapSet() {
 				callbacks_: [],
 				key_: undefined // Maps don't have keys in their parent
 			}
+			// console.log("Draft map: ", target)
 		}
 
 		get size(): number {
@@ -54,6 +56,7 @@ export function enableMapSet() {
 		set(key: any, value: any) {
 			const state: MapState = this[DRAFT_STATE]
 			assertUnrevoked(state)
+			// console.log("Map set: ", {key, value})
 			if (!latest(state).has(key) || latest(state).get(key) !== value) {
 				prepareMapCopy(state)
 				markChanged(state)
@@ -107,6 +110,10 @@ export function enableMapSet() {
 			const state: MapState = this[DRAFT_STATE]
 			assertUnrevoked(state)
 			const value = latest(state).get(key)
+			// console.log("Map get: ", {key})
+			if (key === "jedi") {
+				console.trace("Jedi accessed")
+			}
 			if (state.finalized_ || !isDraftable(value)) {
 				return value
 			}
@@ -290,7 +297,11 @@ export function enableMapSet() {
 			}
 		}
 	}
-	function proxySet_<T extends AnySet>(target: T, parent?: ImmerState): T {
+	function proxySet_<T extends AnySet>(
+		target: T,
+		parent?: ImmerState,
+		key?: any
+	): T {
 		// @ts-ignore
 		return new DraftSet(target, parent)
 	}

@@ -24,6 +24,7 @@ import {
 	get,
 	Drafted
 } from "../internal"
+import util from "util"
 
 export function processResult(result: any, scope: ImmerScope) {
 	scope.unfinalizedDrafts_ = scope.drafts_.length
@@ -309,6 +310,8 @@ function finalizeWithCallbacksIntegrated(
 		)
 	}
 
+	// console.log("Final result: ", util.inspect(result, {depth: Infinity}))
+
 	return result
 }
 
@@ -476,14 +479,14 @@ export function registerChildFinalizationCallback(
 		const target = parent
 		const parentCopy = parent.copy_ || parent.base_
 		const state: ImmerState = child
-		console.log("Child state: ", state)
+		// console.log("Finalize callback", {key})
 
 		if (!state) {
-			console.log(
-				"No state found for child, skipping finalization callback.",
-				key,
-				child
-			)
+			// console.log(
+			// 	"No state found for child, skipping finalization callback.",
+			// 	key,
+			// 	child
+			// )
 			return
 		}
 

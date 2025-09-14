@@ -88,6 +88,8 @@ export function createProxyProxy<T extends Objectish>(
 		revoked_: false
 	}
 
+	// console.log("createProxyProxy", {key})
+
 	// the traps must target something, a bit like the 'real' base.
 	// but also, we need to be able to determine from the target what the relevant state is
 	// (to avoid creating traps per instance to capture the state in closure,
@@ -105,15 +107,19 @@ export function createProxyProxy<T extends Objectish>(
 	state.draft_ = proxy as any
 	state.revoke_ = revoke
 
-	if (parent && key !== undefined) {
-		registerChildFinalizationCallback(rootScope, parent, state, key)
-	} else {
-		// It's a root draft, register it with the scope
-		state.callbacks_ = []
-		state.callbacks_.push(() => {
-			console.log("Finalizing root draft", state)
-		})
-	}
+	// if (parent && key !== undefined) {
+	// 	console.log("Registering child finalization callback", {
+	// 		key,
+	// 		base
+	// 	})
+	// 	registerChildFinalizationCallback(rootScope, parent, state, key)
+	// } else {
+	// 	// It's a root draft, register it with the scope
+	// 	state.callbacks_ = []
+	// 	state.callbacks_.push(() => {
+	// 		console.log("Finalizing root draft", state.base_)
+	// 	})
+	// }
 
 	return proxy as any
 }
@@ -124,7 +130,7 @@ export function createProxyProxy<T extends Objectish>(
 export const objectTraps: ProxyHandler<ProxyState> = {
 	get(state, prop) {
 		if (state.revoked_) {
-			console.trace("Cannot access a proxy that was revoked!", {state, prop})
+			console.log("Cannot access a proxy that was revoked!", {state, prop})
 			throw new Error(
 				"Cannot access a proxy that was revoked! " + JSON.stringify(prop)
 			)
@@ -132,6 +138,10 @@ export const objectTraps: ProxyHandler<ProxyState> = {
 		if (prop === DRAFT_STATE) return state
 
 		const source = latest(state)
+		// console.log("get", {prop})
+		if (prop === "base_") {
+			console.trace("Base accessed", {state, prop})
+		}
 		if (!has(source, prop)) {
 			// non-existing or non-own property...
 			return readPropFromProto(state, source, prop)
