@@ -239,10 +239,11 @@ export function createProxy<T extends Objectish>(
 	scope.drafts_.push(draft)
 	const state: ImmerState = draft[DRAFT_STATE]
 
+	state.callbacks_ = parent?.callbacks_ ?? []
+
 	if (parent && key !== undefined) {
 		// console.log("Registering child finalization callback", {
 		// 	key
-		// 	// value
 		// })
 		registerChildFinalizationCallback(rootScope, parent, state, key)
 	} else {

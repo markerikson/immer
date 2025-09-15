@@ -83,12 +83,12 @@ export function createProxyProxy<T extends Objectish>(
 		isManual_: false,
 		// New callback system fields
 		// operated_: false,
-		callbacks_: [],
+		callbacks_: parent?.callbacks_ ?? [],
 		key_: key,
 		revoked_: false
 	}
 
-	// console.log("createProxyProxy", {key})
+	// console.log("createProxyProxy", {key, callbacks: state.callbacks_})
 
 	// the traps must target something, a bit like the 'real' base.
 	// but also, we need to be able to determine from the target what the relevant state is
@@ -130,7 +130,7 @@ export function createProxyProxy<T extends Objectish>(
 export const objectTraps: ProxyHandler<ProxyState> = {
 	get(state, prop) {
 		if (state.revoked_) {
-			console.log("Cannot access a proxy that was revoked!", {state, prop})
+			console.trace("Cannot access a proxy that was revoked!", {state, prop})
 			throw new Error(
 				"Cannot access a proxy that was revoked! " + JSON.stringify(prop)
 			)
