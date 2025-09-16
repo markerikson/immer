@@ -25,7 +25,8 @@ import {
 	freeze,
 	current,
 	ImmerScope,
-	registerChildFinalizationCallback
+	registerChildFinalizationCallback,
+	ArchType
 } from "../internal"
 
 interface ProducersFns {
@@ -221,13 +222,26 @@ export class Immer implements ProducersFns {
 	}
 }
 
+function archTypeToString(value: ArchType) {
+	switch (value) {
+		case ArchType.Object:
+			return "Object"
+		case ArchType.Array:
+			return "Array"
+		case ArchType.Map:
+			return "Map"
+		case ArchType.Set:
+			return "Set"
+	}
+}
+
 export function createProxy<T extends Objectish>(
 	rootScope: ImmerScope,
 	value: T,
 	parent?: ImmerState,
 	key?: string | number | symbol
 ): Drafted<T, ImmerState> {
-	// console.log("createProxy: ", {key})
+	// console.log("createProxy: ", {key, parent: parent?.base_})
 	// precondition: createProxy should be guarded by isDraftable, so we know we can safely draft
 	const draft: Drafted = isMap(value)
 		? getPlugin("MapSet").proxyMap_(value, parent)
@@ -242,15 +256,28 @@ export function createProxy<T extends Objectish>(
 	state.callbacks_ = parent?.callbacks_ ?? []
 
 	if (parent && key !== undefined) {
-		// console.log("Registering child finalization callback", {
-		// 	key
-		// })
+		console.log("Registering child finalization callback", {
+			key,
+			type: archTypeToString(state.type_)
+		})
 		registerChildFinalizationCallback(rootScope, parent, state, key)
 	} else {
 		// It's a root draft, register it with the scope
+		// console.log("Registering root draft with scope")
 		state.callbacks_ = []
 		state.callbacks_.push(() => {
-			// console.log("Finalizing root draft")
+			console.log("Finalizing root draft")
+			if (state.type_ === ArchType.Set && state.modified_) {
+				const copy = new Set(state.copy_!)
+				state.copy_!.clear()
+				copy.forEach(value => {
+					const itemState = isDraft(value) ? value[DRAFT_STATE] : null
+					const finalValue = itemState
+						? itemState.copy_ ?? itemState.base_
+						: value
+					state.copy_!.add(finalValue)
+				})
+			}
 		})
 	}
 

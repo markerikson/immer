@@ -209,6 +209,8 @@ export function enableMapSet() {
 				callbacks_: [],
 				key_: undefined // Sets don't have keys in their parent
 			}
+
+			// console.log("Draft set:", target)
 		}
 
 		get size(): number {
@@ -312,7 +314,7 @@ export function enableMapSet() {
 			state.copy_ = new Set()
 			state.base_.forEach(value => {
 				if (isDraftable(value)) {
-					const draft = createProxy(state.scope_, value, state)
+					const draft = createProxy(state.scope_, value, state, value)
 					// registerChildFinalizationCallback(
 					// 	state.scope_,
 					// 	state,

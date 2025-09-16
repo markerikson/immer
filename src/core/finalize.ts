@@ -67,6 +67,8 @@ function finalizeAlternate(
 	// Don't recurse in tho recursive data structures
 	if (isFrozen(value)) return value
 
+	console.log("Finalizing scope: ", util.inspect(rootScope, {depth: 3}), value)
+
 	const state: ImmerState = value[DRAFT_STATE]
 	// A plain object, might need freezing, might contain drafts
 	if (!state) {
@@ -75,13 +77,24 @@ function finalizeAlternate(
 			rootScope.handledSet_ = new WeakSet()
 		}
 		// REPLACE tree traversal with enhanced non-draft handling
-		handleValue(value, rootScope.handledSet_, rootScope)
-		return value
+		// handleValue(value, rootScope.handledSet_, rootScope)
+		console.log("Finalizing plain object: ", value)
+		const finalValue = handleValue(value, rootScope.handledSet_, rootScope)
+		console.log("New final value: ", finalValue)
+		return finalValue
 	}
 	// Never finalize drafts owned by another scope - PRESERVE
-	if (state.scope_ !== rootScope) return value
+	if (state.scope_ !== rootScope) {
+		console.log(
+			"Skipping finalization of foreign draft in scope",
+			state.scope_,
+			rootScope
+		)
+		return value
+	}
 	// Unmodified draft, return the (frozen) original - PRESERVE
 	if (!state.modified_) {
+		console.log("State not modified: ", state)
 		maybeFreeze(rootScope, state.base_, true)
 		return state.base_
 	}
@@ -90,6 +103,7 @@ function finalizeAlternate(
 		// Use callback-based finalization instead of tree traversal
 		return finalizeWithCallbacksIntegrated(rootScope, state, path)
 	}
+
 	return state.copy_
 }
 
@@ -310,7 +324,7 @@ function finalizeWithCallbacksIntegrated(
 		)
 	}
 
-	// console.log("Final result: ", util.inspect(result, {depth: Infinity}))
+	console.log("Final result: ", util.inspect(result, {depth: Infinity}))
 
 	return result
 }
@@ -478,22 +492,32 @@ export function registerChildFinalizationCallback(
 	parent.callbacks_.push(() => {
 		const target = parent
 		const parentCopy = parent.copy_ || parent.base_
+		const childCopy = get(parentCopy, key)
 		const state: ImmerState = child
-		// console.log("Finalize callback", {key})
+		console.log("Finalize callback", {key, parent, child, childCopy})
 
 		if (!state) {
-			// console.log(
-			// 	"No state found for child, skipping finalization callback.",
-			// 	key,
-			// 	child
-			// )
+			console.log(
+				"No state found for child, skipping finalization callback.",
+				key,
+				child
+			)
 			return
 		}
 
 		// Never finalize drafts owned by another scope.
-		if (state.scope_ !== rootScope) return
+		if (state.scope_ !== rootScope) {
+			console.log(
+				"Skipping finalization of foreign draft",
+				key,
+				state.scope_,
+				rootScope
+			)
+			return
+		}
 		// Unmodified draft, return the (frozen) original
 		if (!state.modified_) {
+			console.log("State not modified: ", state)
 			maybeFreeze(rootScope, state.base_, true)
 			// return state.base_
 			return
@@ -502,14 +526,17 @@ export function registerChildFinalizationCallback(
 		state.finalized_ = true
 		state.scope_.unfinalizedDrafts_--
 
-		let updatedValue = state.copy_
+		let updatedValue = childCopy // state.copy_
+		console.log("Callback finalizing value", {key, updatedValue, parentCopy})
+
+		finalizeSetValue(state)
 
 		// let isSet = false
-		if (state.type_ === ArchType.Set) {
-			updatedValue = new Set(updatedValue)
-			updatedValue.clear()
-			// isSet = true
-		}
+		// if (state.type_ === ArchType.Set) {
+		// 	updatedValue = new Set(updatedValue)
+		// 	// updatedValue.clear()
+		// 	// isSet = true
+		// }
 
 		set(parentCopy, key, updatedValue)
 
@@ -538,7 +565,35 @@ export function registerChildFinalizationCallback(
 		// 	// parent.copy_![key] = finalValue
 		// 	set(parent.copy_, key, finalValue)
 		// }
+		console.log("Child callbacks: ", child.callbacks_)
+
+		// if (child.callbacks_) {
+		// 	child.callbacks_.forEach(callback => {
+		// 		console.log("Child callback: ", callback.toString())
+		// 		callback()
+		// 	})
+		// }
 	})
+}
+
+function getDraft(value: any): ImmerState | null {
+	if (typeof value !== "object") return null
+	return value?.[DRAFT_STATE]
+}
+
+function getValue<T extends object>(value: T): T {
+	const proxyDraft = getDraft(value)
+	return proxyDraft ? proxyDraft.copy_ ?? proxyDraft.base_ : value
+}
+
+export function finalizeSetValue(target: ImmerState) {
+	if (target.type_ === ArchType.Set && target.copy_) {
+		const copy = new Set(target.copy_)
+		target.copy_.clear()
+		copy.forEach(value => {
+			target.copy_!.add(getValue(value))
+		})
+	}
 }
 
 export function finalizeWithCallbacks(
@@ -574,65 +629,12 @@ export function finalizeWithCallbacks(
 	return state.copy_ || state.base_
 }
 
-function finalizeAssigned(
-	state: ImmerState,
-	key: PropertyKey,
-	rootScope: ImmerScope
-) {
-	// Handle different state types and their copy/assigned structures
-	let copy: any = null
-	let wasAssigned = false
-
-	if (state.type_ === ArchType.Map) {
-		const mapState = state as MapState
-		copy = mapState.copy_ // This is a Map<any, any>
-		wasAssigned = mapState.assigned_?.get(key) === true
-	} else if (state.type_ === ArchType.Set) {
-		const setState = state as SetState
-		copy = setState.copy_ // This is a Set<any>
-		// For Sets, we need different logic since they don't have key-based assignment
-		// Sets track drafts differently - check if the value exists in the copy
-		wasAssigned = copy && copy.has(key) // key is actually the value for Sets
-	} else {
-		// Proxy states (Object/Array)
-		const proxyState = state as ProxyObjectState | ProxyArrayState
-		copy = proxyState.copy_
-		wasAssigned = proxyState.assigned_[key as string] === true
-	}
-
-	if (!copy || !wasAssigned) {
-		return // Nothing to process
-	}
-
-	// Get the assigned value based on state type
-	let assignedValue: any
-
-	if (state.type_ === ArchType.Map) {
-		assignedValue = (copy as Map<any, any>).get(key)
-	} else if (state.type_ === ArchType.Set) {
-		// For Sets, the key IS the value
-		assignedValue = key
-	} else {
-		// Object/Array
-		assignedValue = copy[key]
-	}
-
-	// Process assigned value for nested draft references
-	if (assignedValue && isDraftable(assignedValue)) {
-		if (!rootScope.handledSet_) {
-			rootScope.handledSet_ = new WeakSet()
-		}
-
-		// Use the comprehensive handleValue function to process nested drafts
-		handleValue(assignedValue, rootScope.handledSet_, rootScope)
-	}
-}
-
-function handleValue(
+export function handleValue(
 	target: any,
 	handledSet: WeakSet<any>,
 	rootScope: ImmerScope
 ) {
+	console.log("handleValue: ", {target})
 	// Skip if already handled, frozen, or not draftable
 	if (
 		isDraft(target) ||
@@ -640,7 +642,7 @@ function handleValue(
 		!isDraftable(target) ||
 		isFrozen(target)
 	) {
-		return
+		return target
 	}
 
 	if (!rootScope.immer_.autoFreeze_ && rootScope.unfinalizedDrafts_ < 1) {
@@ -649,7 +651,7 @@ function handleValue(
 		// cause we saw and finalized all drafts already; we can stop visiting the rest of the tree.
 		// This benefits especially adding large data tree's without further processing.
 		// See add-data.js perf test
-		return
+		return target
 	}
 
 	const isSet = target instanceof Set
@@ -663,17 +665,25 @@ function handleValue(
 			const valueDraft = value[DRAFT_STATE]
 			if (valueDraft.scope_ === rootScope) {
 				// Replace draft with finalized value
-				const updatedValue = valueDraft.operated_
-					? finalizeWithCallbacks(valueDraft, rootScope)
-					: valueDraft.base_
 
-				if (isSet) {
-					setMap!.set(value, updatedValue)
-				} else if (isMap) {
-					;(target as Map<any, any>).set(key, updatedValue)
-				} else {
-					target[key] = updatedValue
-				}
+				const updatedValue = valueDraft.modified_
+					? valueDraft.copy_
+					: valueDraft.base_
+				console.log("Replacing draft with finalized value", {
+					key,
+					value,
+					valueDraft,
+					updatedValue
+				})
+
+				set(target, key, updatedValue)
+				// if (isSet) {
+				// 	setMap!.set(value, updatedValue)
+				// } else if (isMap) {
+				// 	;(target as Map<any, any>).set(key, updatedValue)
+				// } else {
+				// 	target[key] = updatedValue
+				// }
 			}
 		} else if (isDraftable(value)) {
 			// Recursively handle nested values
@@ -690,4 +700,8 @@ function handleValue(
 			set.add(setMap!.has(value) ? setMap!.get(value) : value)
 		})
 	}
+
+	console.log("handleValue - final target: ", {target})
+
+	return target
 }

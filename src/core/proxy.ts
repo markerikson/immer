@@ -19,8 +19,10 @@ import {
 	ArchType,
 	ImmerScope,
 	registerChildFinalizationCallback,
+	finalizeWithCallbacks,
 	isDraft,
-	finalizeWithCallbacks
+	handleValue,
+	get
 } from "../internal"
 
 interface ProxyBaseState extends ImmerBaseState {
@@ -138,7 +140,7 @@ export const objectTraps: ProxyHandler<ProxyState> = {
 		if (prop === DRAFT_STATE) return state
 
 		const source = latest(state)
-		// console.log("get", {prop})
+		// console.log("Object get", {key: prop})
 		if (prop === "base_") {
 			console.trace("Base accessed", {state, prop})
 		}
@@ -172,6 +174,7 @@ export const objectTraps: ProxyHandler<ProxyState> = {
 		value
 	) {
 		const desc = getDescriptorFromProto(latest(state), prop)
+		// console.log("Object set: ", {key: prop})
 		if (desc?.set) {
 			// special case: if this write is captured by a setter, we have
 			// to trigger it with the correct context
@@ -341,22 +344,26 @@ function handleCrossReference(
 	key: string | number | symbol,
 	value: any
 ) {
+	console.log("handleCrossReference", {key, value, target})
 	// Check if value is a draft from this scope
 	if (isDraft(value)) {
-		const valueDraft = value[DRAFT_STATE]
+		const valueDraft: ImmerState = value[DRAFT_STATE]
+		console.log("Handling cross-reference", {key, value, valueDraft, target})
 		if (valueDraft.scope_ === target.scope_) {
 			// Register callback to update this location when the draft finalizes
 			if (!valueDraft.callbacks_) {
 				valueDraft.callbacks_ = []
 			}
 
+			console.log("Pushing callback to child draft", {key})
 			valueDraft.callbacks_.push(() => {
+				console.log("Child draft finalized, updating parent", {key})
 				// Update the target location with finalized value
 				const targetCopy = target.copy_ || target.base_
 				if (targetCopy[key] === value) {
 					let finalizedValue
-					if (valueDraft.operated_) {
-						finalizedValue = finalizeWithCallbacks(valueDraft, target.scope_)
+					if (valueDraft.modified_) {
+						finalizedValue = valueDraft.copy_
 					} else {
 						finalizedValue = valueDraft.base_
 					}
@@ -368,5 +375,18 @@ function handleCrossReference(
 				}
 			})
 		}
+	} else if (isDraftable(value)) {
+		// NEW: Handle non-draft objects that might contain drafts
+		if (!target.callbacks_) {
+			target.callbacks_ = []
+		}
+		target.callbacks_.push(() => {
+			const targetCopy = target.copy_ || target.base_
+
+			if (get(targetCopy, key) === value) {
+				// Process the value to replace any nested drafts
+				handleValue(value, new WeakSet(), target.scope_)
+			}
+		})
 	}
 }
