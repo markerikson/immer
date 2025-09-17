@@ -90,7 +90,7 @@ export function createProxyProxy<T extends Objectish>(
 		revoked_: false
 	}
 
-	// console.log("createProxyProxy", {key, callbacks: state.callbacks_})
+	// debugLog("createProxyProxy", {key, callbacks: state.callbacks_})
 
 	// the traps must target something, a bit like the 'real' base.
 	// but also, we need to be able to determine from the target what the relevant state is
@@ -110,7 +110,7 @@ export function createProxyProxy<T extends Objectish>(
 	state.revoke_ = revoke
 
 	// if (parent && key !== undefined) {
-	// 	console.log("Registering child finalization callback", {
+	// 	debugLog("Registering child finalization callback", {
 	// 		key,
 	// 		base
 	// 	})
@@ -119,7 +119,7 @@ export function createProxyProxy<T extends Objectish>(
 	// 	// It's a root draft, register it with the scope
 	// 	state.callbacks_ = []
 	// 	state.callbacks_.push(() => {
-	// 		console.log("Finalizing root draft", state.base_)
+	// 		debugLog("Finalizing root draft", state.base_)
 	// 	})
 	// }
 
@@ -140,7 +140,7 @@ export const objectTraps: ProxyHandler<ProxyState> = {
 		if (prop === DRAFT_STATE) return state
 
 		const source = latest(state)
-		// console.log("Object get", {key: prop})
+		// debugLog("Object get", {key: prop})
 		if (prop === "base_") {
 			console.trace("Base accessed", {state, prop})
 		}
@@ -174,7 +174,7 @@ export const objectTraps: ProxyHandler<ProxyState> = {
 		value
 	) {
 		const desc = getDescriptorFromProto(latest(state), prop)
-		// console.log("Object set: ", {key: prop})
+		// debugLog("Object set: ", {key: prop})
 		if (desc?.set) {
 			// special case: if this write is captured by a setter, we have
 			// to trigger it with the correct context
@@ -344,20 +344,20 @@ function handleCrossReference(
 	key: string | number | symbol,
 	value: any
 ) {
-	console.log("handleCrossReference", {key, value, target})
+	// debugLog("handleCrossReference", {key, value, target})
 	// Check if value is a draft from this scope
 	if (isDraft(value)) {
 		const valueDraft: ImmerState = value[DRAFT_STATE]
-		console.log("Handling cross-reference", {key, value, valueDraft, target})
+		// debugLog("Handling cross-reference", {key, value, valueDraft, target})
 		if (valueDraft.scope_ === target.scope_) {
 			// Register callback to update this location when the draft finalizes
 			if (!valueDraft.callbacks_) {
 				valueDraft.callbacks_ = []
 			}
 
-			console.log("Pushing callback to child draft", {key})
+			// debugLog("Pushing callback to child draft", {key})
 			valueDraft.callbacks_.push(() => {
-				console.log("Child draft finalized, updating parent", {key})
+				// debugLog("Child draft finalized, updating parent", {key})
 				// Update the target location with finalized value
 				const targetCopy = target.copy_ || target.base_
 				if (targetCopy[key] === value) {

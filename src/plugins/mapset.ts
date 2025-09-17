@@ -42,7 +42,7 @@ export function enableMapSet() {
 				callbacks_: [],
 				key_: undefined // Maps don't have keys in their parent
 			}
-			// console.log("Draft map: ", target)
+			// debugLog("Draft map: ", target)
 		}
 
 		get size(): number {
@@ -56,7 +56,7 @@ export function enableMapSet() {
 		set(key: any, value: any) {
 			const state: MapState = this[DRAFT_STATE]
 			assertUnrevoked(state)
-			// console.log("Map set: ", {key, value})
+			// debugLog("Map set: ", {key, value})
 			if (!latest(state).has(key) || latest(state).get(key) !== value) {
 				prepareMapCopy(state)
 				markChanged(state)
@@ -110,7 +110,7 @@ export function enableMapSet() {
 			const state: MapState = this[DRAFT_STATE]
 			assertUnrevoked(state)
 			const value = latest(state).get(key)
-			// console.log("Map get: ", {key})
+			// debugLog("Map get: ", {key})
 			if (key === "jedi") {
 				console.trace("Jedi accessed")
 			}
@@ -210,7 +210,7 @@ export function enableMapSet() {
 				key_: undefined // Sets don't have keys in their parent
 			}
 
-			// console.log("Draft set:", target)
+			// debugLog("Draft set:", target)
 		}
 
 		get size(): number {

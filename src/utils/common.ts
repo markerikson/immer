@@ -14,6 +14,14 @@ import {
 
 export const getPrototypeOf = Object.getPrototypeOf
 
+const ENABLE_LOGGING = false
+
+export const debugLog: typeof console.log = (...args) => {
+	if (ENABLE_LOGGING) {
+		console.log(new Date(), ...args)
+	}
+}
+
 /** Returns true if the given value is an Immer draft */
 /*#__PURE__*/
 export function isDraft(value: any): boolean {

@@ -24,6 +24,7 @@ import {
 	get,
 	Drafted
 } from "../internal"
+import {debugLog} from "../internal"
 import util from "util"
 
 export function processResult(result: any, scope: ImmerScope) {
@@ -67,7 +68,7 @@ function finalizeAlternate(
 	// Don't recurse in tho recursive data structures
 	if (isFrozen(value)) return value
 
-	console.log("Finalizing scope: ", util.inspect(rootScope, {depth: 3}), value)
+	// debugLog("Finalizing scope: ", util.inspect(rootScope, {depth: 3}), value)
 
 	const state: ImmerState = value[DRAFT_STATE]
 	// A plain object, might need freezing, might contain drafts
@@ -76,16 +77,15 @@ function finalizeAlternate(
 		if (!rootScope.handledSet_) {
 			rootScope.handledSet_ = new WeakSet()
 		}
-		// REPLACE tree traversal with enhanced non-draft handling
-		// handleValue(value, rootScope.handledSet_, rootScope)
-		console.log("Finalizing plain object: ", value)
+
+		debugLog("Finalizing plain object: ", value)
 		const finalValue = handleValue(value, rootScope.handledSet_, rootScope)
-		console.log("New final value: ", finalValue)
+		debugLog("New final value: ", finalValue)
 		return finalValue
 	}
 	// Never finalize drafts owned by another scope - PRESERVE
 	if (state.scope_ !== rootScope) {
-		console.log(
+		debugLog(
 			"Skipping finalization of foreign draft in scope",
 			state.scope_,
 			rootScope
@@ -94,7 +94,7 @@ function finalizeAlternate(
 	}
 	// Unmodified draft, return the (frozen) original - PRESERVE
 	if (!state.modified_) {
-		console.log("State not modified: ", state)
+		debugLog("State not modified: ", state)
 		maybeFreeze(rootScope, state.base_, true)
 		return state.base_
 	}
@@ -324,7 +324,7 @@ function finalizeWithCallbacksIntegrated(
 		)
 	}
 
-	console.log("Final result: ", util.inspect(result, {depth: Infinity}))
+	debugLog("Final result: ", util.inspect(result, {depth: Infinity}))
 
 	return result
 }
@@ -494,10 +494,10 @@ export function registerChildFinalizationCallback(
 		const parentCopy = parent.copy_ || parent.base_
 		const childCopy = get(parentCopy, key)
 		const state: ImmerState = child
-		console.log("Finalize callback", {key, parent, child, childCopy})
+		debugLog("Finalize callback", {key, parent, child, childCopy})
 
 		if (!state) {
-			console.log(
+			debugLog(
 				"No state found for child, skipping finalization callback.",
 				key,
 				child
@@ -507,7 +507,7 @@ export function registerChildFinalizationCallback(
 
 		// Never finalize drafts owned by another scope.
 		if (state.scope_ !== rootScope) {
-			console.log(
+			debugLog(
 				"Skipping finalization of foreign draft",
 				key,
 				state.scope_,
@@ -517,7 +517,7 @@ export function registerChildFinalizationCallback(
 		}
 		// Unmodified draft, return the (frozen) original
 		if (!state.modified_) {
-			console.log("State not modified: ", state)
+			debugLog("State not modified: ", state)
 			maybeFreeze(rootScope, state.base_, true)
 			// return state.base_
 			return
@@ -527,7 +527,13 @@ export function registerChildFinalizationCallback(
 		state.scope_.unfinalizedDrafts_--
 
 		let updatedValue = childCopy // state.copy_
-		console.log("Callback finalizing value", {key, updatedValue, parentCopy})
+		debugLog("Callback finalizing value", {
+			key,
+			updatedValue,
+			childCopy,
+			stateCopy: state.copy_,
+			parentCopy
+		})
 
 		finalizeSetValue(state)
 
@@ -544,7 +550,7 @@ export function registerChildFinalizationCallback(
 		// const parentCopy = parent.copy_ || parent.base_
 		// const currentValue = get(parentCopy, key)
 
-		// console.log("Finalizing value", {key, currentValue, child})
+		// debugLog("Finalizing value", {key, currentValue, child})
 
 		// // Check if it's still our child draft
 		// if (currentValue && currentValue[DRAFT_STATE] === child) {
@@ -565,11 +571,11 @@ export function registerChildFinalizationCallback(
 		// 	// parent.copy_![key] = finalValue
 		// 	set(parent.copy_, key, finalValue)
 		// }
-		console.log("Child callbacks: ", child.callbacks_)
+		// debugLog("Child callbacks: ", child.callbacks_)
 
 		// if (child.callbacks_) {
 		// 	child.callbacks_.forEach(callback => {
-		// 		console.log("Child callback: ", callback.toString())
+		// 		debugLog("Child callback: ", callback.toString())
 		// 		callback()
 		// 	})
 		// }
@@ -634,7 +640,7 @@ export function handleValue(
 	handledSet: WeakSet<any>,
 	rootScope: ImmerScope
 ) {
-	console.log("handleValue: ", {target})
+	debugLog("handleValue: ", {target})
 	// Skip if already handled, frozen, or not draftable
 	if (
 		isDraft(target) ||
@@ -669,7 +675,7 @@ export function handleValue(
 				const updatedValue = valueDraft.modified_
 					? valueDraft.copy_
 					: valueDraft.base_
-				console.log("Replacing draft with finalized value", {
+				debugLog("Replacing draft with finalized value", {
 					key,
 					value,
 					valueDraft,
@@ -701,7 +707,7 @@ export function handleValue(
 		})
 	}
 
-	console.log("handleValue - final target: ", {target})
+	debugLog("handleValue - final target: ", {target})
 
 	return target
 }
