@@ -325,30 +325,23 @@ exports[`complex nesting map / set / object > modify deep object 1`] = `
 `;
 
 exports[`complex nesting map / set / object > modify deep object 2`] = `
-[
-  {
-    "op": "remove",
-    "path": [
-      "map",
-      "set1",
-      0,
-    ],
-    "value": {
-      "a": 1,
+{
+  "map": Map {
+    "set1" => Set {
+      {
+        "a": 2,
+      },
+      {
+        "b": 2,
+      },
+    },
+    "set2" => Set {
+      {
+        "c": 3,
+      },
     },
   },
-  {
-    "op": "add",
-    "path": [
-      "map",
-      "set1",
-      0,
-    ],
-    "value": {
-      "a": 2,
-    },
-  },
-]
+}
 `;
 
 exports[`complex nesting map / set / object > modify deep object 3`] = `
@@ -372,30 +365,23 @@ exports[`complex nesting map / set / object > modify deep object 3`] = `
 `;
 
 exports[`complex nesting map / set / object > modify deep object 4`] = `
-[
-  {
-    "op": "remove",
-    "path": [
-      "map",
-      "set1",
-      0,
-    ],
-    "value": {
-      "a": 1,
+{
+  "map": Map {
+    "set1" => Set {
+      {
+        "a": 2,
+      },
+      {
+        "b": 2,
+      },
+    },
+    "set2" => Set {
+      {
+        "c": 3,
+      },
     },
   },
-  {
-    "op": "add",
-    "path": [
-      "map",
-      "set1",
-      0,
-    ],
-    "value": {
-      "a": 2,
-    },
-  },
-]
+}
 `;
 
 exports[`complex nesting map / set / object > modify deep object 5`] = `
@@ -419,30 +405,23 @@ exports[`complex nesting map / set / object > modify deep object 5`] = `
 `;
 
 exports[`complex nesting map / set / object > modify deep object 6`] = `
-[
-  {
-    "op": "remove",
-    "path": [
-      "map",
-      "set1",
-      0,
-    ],
-    "value": {
-      "a": 1,
+{
+  "map": Map {
+    "set1" => Set {
+      {
+        "a": 2,
+      },
+      {
+        "b": 2,
+      },
+    },
+    "set2" => Set {
+      {
+        "c": 3,
+      },
     },
   },
-  {
-    "op": "add",
-    "path": [
-      "map",
-      "set1",
-      0,
-    ],
-    "value": {
-      "a": 2,
-    },
-  },
-]
+}
 `;
 
 exports[`complex nesting map / set / object > modify deep object 7`] = `
@@ -466,30 +445,23 @@ exports[`complex nesting map / set / object > modify deep object 7`] = `
 `;
 
 exports[`complex nesting map / set / object > modify deep object 8`] = `
-[
-  {
-    "op": "remove",
-    "path": [
-      "map",
-      "set1",
-      0,
-    ],
-    "value": {
-      "a": 1,
+{
+  "map": Map {
+    "set1" => Set {
+      {
+        "a": 2,
+      },
+      {
+        "b": 2,
+      },
+    },
+    "set2" => Set {
+      {
+        "c": 3,
+      },
     },
   },
-  {
-    "op": "add",
-    "path": [
-      "map",
-      "set1",
-      0,
-    ],
-    "value": {
-      "a": 2,
-    },
-  },
-]
+}
 `;
 
 exports[`complex nesting map / set / object > modify deep object 9`] = `
