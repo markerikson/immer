@@ -22,7 +22,9 @@ import {
 	finalizeWithCallbacks,
 	isDraft,
 	handleValue,
-	get
+	get,
+	SetState,
+	debugLog
 } from "../internal"
 
 interface ProxyBaseState extends ImmerBaseState {
@@ -385,8 +387,30 @@ function handleCrossReference(
 
 			if (get(targetCopy, key) === value) {
 				// Process the value to replace any nested drafts
-				handleValue(value, new WeakSet(), target.scope_)
+				//handleValue(value, new WeakSet(), target.scope_)
+				finalizeAssigned(target, key, target.scope_)
 			}
 		})
+	}
+}
+
+export function finalizeAssigned(
+	state: ImmerState,
+	key: PropertyKey,
+	rootScope: ImmerScope
+) {
+	// Equivalent to Mutative's conditional checks
+	const copy = state.copy_
+	debugLog("finalizeAssigned", {key, copy, state})
+	if (
+		rootScope.drafts_.length > 1 && // Multiple finalization contexts (equivalent to revoke.length > 1)
+		has((state as Exclude<ImmerState, SetState>).assigned_!, key) &&
+		//state.assigned_?.[key] &&         // The key was actually assigned
+		copy // Copy exists
+	) {
+		if (!rootScope.handledSet_) {
+			rootScope.handledSet_ = new WeakSet()
+		}
+		handleValue(get(copy, key), rootScope.handledSet_, rootScope)
 	}
 }
