@@ -526,7 +526,23 @@ export function registerChildFinalizationCallback(
 		state.finalized_ = true
 		state.scope_.unfinalizedDrafts_--
 
-		let updatedValue = childCopy // state.copy_
+		let updatedValue
+		if (parent.type_ === ArchType.Set) {
+			// For Sets, key IS the value - use the draft's finalized copy directly
+			updatedValue = state.copy_
+		} else {
+			// For Maps/Objects, use lookup logic
+			const childCopy = get(parentCopy, key)
+			updatedValue = isDraft(childCopy) ? state.copy_ : childCopy
+		}
+		// if (isDraft(childCopy)) {
+		// 	// childCopy is still a draft - use the draft's finalized copy
+		// 	updatedValue = state.copy_
+		// } else {
+		// 	// childCopy is already a finalized plain object - use it directly
+		// 	updatedValue = childCopy
+		// }
+		// let updatedValue = state.copy_
 		debugLog("Callback finalizing value", {
 			key,
 			updatedValue,
