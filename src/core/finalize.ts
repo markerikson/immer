@@ -519,6 +519,16 @@ export function registerChildFinalizationCallback(
 		if (!state.modified_) {
 			debugLog("State not modified: ", state)
 			maybeFreeze(rootScope, state.base_, true)
+
+			// set(parentCopy, key, state.base_)
+			const currentValue = get(parentCopy, key)
+			const isMultipleReference =
+				currentValue === state.draft_ && state.base_ !== currentValue
+
+			if (isMultipleReference) {
+				// Multiple reference case - revert to base object
+				set(parentCopy, key, state.base_)
+			}
 			// return state.base_
 			return
 		}
