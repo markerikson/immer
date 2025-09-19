@@ -346,7 +346,7 @@ function handleCrossReference(
 	key: string | number | symbol,
 	value: any
 ) {
-	// debugLog("handleCrossReference", {key, value, target})
+	debugLog("handleCrossReference", {key, value, target})
 	// Check if value is a draft from this scope
 	if (isDraft(value)) {
 		const valueDraft: ImmerState = value[DRAFT_STATE]
@@ -357,9 +357,9 @@ function handleCrossReference(
 				valueDraft.callbacks_ = []
 			}
 
-			// debugLog("Pushing callback to child draft", {key})
+			debugLog("Pushing callback to child draft", {key})
 			valueDraft.callbacks_.push(() => {
-				// debugLog("Child draft finalized, updating parent", {key})
+				debugLog("Child draft finalized, updating parent", {key})
 				// Update the target location with finalized value
 				const targetCopy = target.copy_ || target.base_
 				if (targetCopy[key] === value) {
@@ -382,10 +382,12 @@ function handleCrossReference(
 		if (!target.callbacks_) {
 			target.callbacks_ = []
 		}
+		debugLog("Pushing callback to handle nested drafts", {key})
 		target.callbacks_.push(() => {
 			const targetCopy = target.copy_ || target.base_
 
 			if (get(targetCopy, key) === value) {
+				debugLog("Handling nested drafts", {key, value})
 				// Process the value to replace any nested drafts
 				//handleValue(value, new WeakSet(), target.scope_)
 				finalizeAssigned(target, key, target.scope_)

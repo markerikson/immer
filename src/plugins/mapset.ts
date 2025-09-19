@@ -111,9 +111,6 @@ export function enableMapSet() {
 			assertUnrevoked(state)
 			const value = latest(state).get(key)
 			// debugLog("Map get: ", {key})
-			if (key === "jedi") {
-				console.trace("Jedi accessed")
-			}
 			if (state.finalized_ || !isDraftable(value)) {
 				return value
 			}
@@ -122,12 +119,7 @@ export function enableMapSet() {
 			}
 			// despite what it looks, this creates a draft only once, see above condition
 			const draft = createProxy(state.scope_, value, state, key)
-			// registerChildFinalizationCallback(
-			// 	state.scope_,
-			// 	state,
-			// 	draft[DRAFT_STATE],
-			// 	key
-			// )
+
 			prepareMapCopy(state)
 			state.copy_!.set(key, draft)
 			return draft
@@ -315,12 +307,7 @@ export function enableMapSet() {
 			state.base_.forEach(value => {
 				if (isDraftable(value)) {
 					const draft = createProxy(state.scope_, value, state, value)
-					// registerChildFinalizationCallback(
-					// 	state.scope_,
-					// 	state,
-					// 	draft[DRAFT_STATE],
-					// 	value
-					// )
+
 					state.drafts_.set(value, draft)
 					state.copy_!.add(draft)
 				} else {
