@@ -90,54 +90,44 @@ function finalizeAlternate(
 	}
 	// REPLACE: Not finalized yet, use callback-based finalization
 	if (!state.finalized_) {
-		return finalizeWithCallbacksIntegrated(rootScope, state, path)
+		state.finalized_ = true
+		state.scope_.unfinalizedDrafts_--
+
+		// Execute all registered callbacks
+		if (state.callbacks_) {
+			while (state.callbacks_.length > 0) {
+				const callback = state.callbacks_.pop()!
+				callback()
+			}
+		}
+
+		const result = state.copy_
+
+		if (
+			!rootScope.parent_ &&
+			rootScope.immer_.autoFreeze_ &&
+			rootScope.canAutoFreeze_
+		) {
+			maybeFreeze(rootScope, state.base_, true)
+		}
+
+		// Preserve existing freezing logic
+		maybeFreeze(rootScope, result, false)
+
+		// Preserve existing patch generation logic
+		if (path && rootScope.patches_) {
+			getPlugin("Patches").generatePatches_(
+				state,
+				path,
+				rootScope.patches_,
+				rootScope.inversePatches_!
+			)
+		}
+
+		// debugLog("Final result: ", util.inspect(result, {depth: Infinity}))
 	}
 
 	return state.copy_
-}
-
-function finalizeWithCallbacksIntegrated(
-	rootScope: ImmerScope,
-	state: ImmerState,
-	path?: PatchPath
-): any {
-	state.finalized_ = true
-	state.scope_.unfinalizedDrafts_--
-
-	// Execute all registered callbacks
-	if (state.callbacks_) {
-		while (state.callbacks_.length > 0) {
-			const callback = state.callbacks_.pop()!
-			callback()
-		}
-	}
-
-	const result = state.copy_
-
-	if (
-		!rootScope.parent_ &&
-		rootScope.immer_.autoFreeze_ &&
-		rootScope.canAutoFreeze_
-	) {
-		maybeFreeze(rootScope, state.base_, true)
-	}
-
-	// Preserve existing freezing logic
-	maybeFreeze(rootScope, result, false)
-
-	// Preserve existing patch generation logic
-	if (path && rootScope.patches_) {
-		getPlugin("Patches").generatePatches_(
-			state,
-			path,
-			rootScope.patches_,
-			rootScope.inversePatches_!
-		)
-	}
-
-	// debugLog("Final result: ", util.inspect(result, {depth: Infinity}))
-
-	return result
 }
 
 function finalize(rootScope: ImmerScope, value: any, path?: PatchPath) {
