@@ -17,12 +17,7 @@ import {
 	revokeScope,
 	isFrozen,
 	isMap,
-	prepareCopy,
-	MapState,
-	ProxyObjectState,
-	ProxyArrayState,
-	get,
-	Drafted
+	get
 } from "../internal"
 import {debugLog} from "../internal"
 import util from "util"
@@ -73,17 +68,12 @@ function finalizeAlternate(
 	const state: ImmerState = value[DRAFT_STATE]
 	// A plain object, might need freezing, might contain drafts
 	if (!state) {
-		// Initialize handledSet if not present
-		if (!rootScope.handledSet_) {
-			rootScope.handledSet_ = new WeakSet()
-		}
-
 		debugLog("Finalizing plain object: ", value)
 		const finalValue = handleValue(value, rootScope.handledSet_, rootScope)
 		debugLog("New final value: ", finalValue)
 		return finalValue
 	}
-	// Never finalize drafts owned by another scope - PRESERVE
+	// Never finalize drafts owned by another scope
 	if (state.scope_ !== rootScope) {
 		debugLog(
 			"Skipping finalization of foreign draft in scope",
@@ -92,7 +82,7 @@ function finalizeAlternate(
 		)
 		return value
 	}
-	// Unmodified draft, return the (frozen) original - PRESERVE
+	// Unmodified draft, return the (frozen) original
 	if (!state.modified_) {
 		debugLog("State not modified: ", state)
 		maybeFreeze(rootScope, state.base_, true)
@@ -100,7 +90,6 @@ function finalizeAlternate(
 	}
 	// REPLACE: Not finalized yet, use callback-based finalization
 	if (!state.finalized_) {
-		// Use callback-based finalization instead of tree traversal
 		return finalizeWithCallbacksIntegrated(rootScope, state, path)
 	}
 
@@ -112,11 +101,10 @@ function finalizeWithCallbacksIntegrated(
 	state: ImmerState,
 	path?: PatchPath
 ): any {
-	// Mark as finalized and decrement counter (preserve existing logic)
 	state.finalized_ = true
 	state.scope_.unfinalizedDrafts_--
 
-	// Execute all registered callbacks (NEW: callback-based finalization)
+	// Execute all registered callbacks
 	if (state.callbacks_) {
 		while (state.callbacks_.length > 0) {
 			const callback = state.callbacks_.pop()!
@@ -124,184 +112,7 @@ function finalizeWithCallbacksIntegrated(
 		}
 	}
 
-	// Get the result copy
 	const result = state.copy_
-
-	// Handle Set finalization (preserve existing logic but without finalizeProperty)
-	// if (state.type_ === ArchType.Set) {
-	// 	const resultEach = new Set(result)
-	// 	result.clear()
-	// 	resultEach.forEach(value => {
-	// 		if (isDraft(value)) {
-	// 			// Use callback-based finalization instead of finalizeProperty
-	// 			const finalizedValue = finalizeAlternate(rootScope, value)
-	// 			result.add(finalizedValue)
-	// 		} else {
-	// 			result.add(value)
-	// 		}
-	// 	})
-	// }
-	// if (state.type_ === ArchType.Map) {
-	// 	// Handle Map finalization similar to Set
-	// 	// const mapState = state as MapState
-	// 	// if (mapState.assigned_) {
-	// 	// 	mapState.assigned_.forEach((assigned, key) => {
-	// 	// 		if (assigned) {
-	// 	// 			const value = result.get(key)
-	// 	// 			if (isDraft(value)) {
-	// 	// 				const finalizedValue = finalizeAlternate(rootScope, value)
-	// 	// 				result.set(key, finalizedValue)
-	// 	// 			}
-	// 	// 		}
-	// 	// 	})
-	// 	// }
-	// 	const mapCopy = result as Map<any, any>
-	// 	const entries = Array.from(mapCopy.entries()) // Snapshot to avoid iteration issues
-
-	// 	entries.forEach(([key, value]) => {
-	// 		let finalizedKey = key
-	// 		let finalizedValue = value
-	// 		// Finalize key if it contains drafts
-	// 		if (isDraftable(key)) {
-	// 			finalizedKey = finalizeAlternate(rootScope, key)
-	// 		}
-
-	// 		if (isDraft(value)) {
-	// 			finalizedValue = finalizeAlternate(rootScope, value)
-	// 		}
-	// 		mapCopy.set(finalizedKey, finalizedValue)
-	// 	})
-	// }
-
-	// if (state.type_ === ArchType.Map) {
-	// 	const mapState = state as MapState
-	// 	if (mapState.assigned_) {
-	// 		mapState.assigned_.forEach((assigned, key) => {
-	// 			if (assigned) {
-	// 				finalizeAssigned(state, key, rootScope)
-	// 			}
-	// 		})
-	// 	}
-	// } else if (state.type_ === ArchType.Set) {
-	// 	const setState = state as SetState
-	// 	if (setState.copy_) {
-	// 		setState.copy_.forEach(value => {
-	// 			finalizeAssigned(state, value, rootScope) // value is the key for Sets
-	// 		})
-	// 	}
-	// } else {
-	// 	// Object/Array
-	// 	const proxyState = state as ProxyObjectState | ProxyArrayState
-	// 	Object.keys(proxyState.assigned_).forEach(key => {
-	// 		if (proxyState.assigned_[key]) {
-	// 			finalizeAssigned(state, key, rootScope)
-	// 		}
-	// 	})
-	// }
-
-	// Handle Map/Set finalization - these need special processing
-	// if (state.type_ === ArchType.Map) {
-	// 	const mapState = state as MapState
-	// 	const mapCopy = result as Map<any, any>
-
-	// 	// Create a snapshot of entries to avoid iteration issues during modification
-	// 	const entries = Array.from(mapCopy.entries())
-
-	// 	// Process each entry for draft finalization
-	// 	entries.forEach(([key, value]) => {
-	// 		let finalizedKey = key
-	// 		let finalizedValue = value
-	// 		let needsUpdate = false
-
-	// 		// Finalize key if it's a draft or contains drafts
-	// 		if (isDraft(key)) {
-	// 			finalizedKey = finalizeAlternate(rootScope, key)
-	// 			needsUpdate = true
-	// 		} else if (isDraftable(key)) {
-	// 			// Handle non-draft objects that might contain drafts
-	// 			if (!rootScope.handledSet_) {
-	// 				rootScope.handledSet_ = new WeakSet()
-	// 			}
-	// 			handleValue(key, rootScope.handledSet_, rootScope)
-	// 		}
-
-	// 		// Finalize value if it's a draft or contains drafts
-	// 		if (isDraft(value)) {
-	// 			finalizedValue = finalizeAlternate(rootScope, value)
-	// 			needsUpdate = true
-	// 		} else if (isDraftable(value)) {
-	// 			// Handle non-draft objects that might contain drafts
-	// 			if (!rootScope.handledSet_) {
-	// 				rootScope.handledSet_ = new WeakSet()
-	// 			}
-	// 			handleValue(value, rootScope.handledSet_, rootScope)
-	// 		}
-
-	// 		// Update the map if either key or value was finalized
-	// 		if (needsUpdate) {
-	// 			if (key !== finalizedKey) {
-	// 				mapCopy.delete(key)
-	// 			}
-	// 			mapCopy.set(finalizedKey, finalizedValue)
-	// 		}
-	// 	})
-	// } else if (state.type_ === ArchType.Set) {
-	// 	const setState = state as SetState
-	// 	const setCopy = result as Set<any>
-
-	// 	// Create a snapshot of values to avoid iteration issues during modification
-	// 	const values = Array.from(setCopy)
-	// 	setCopy.clear()
-
-	// 	// Process each value for draft finalization
-	// 	values.forEach(value => {
-	// 		let finalizedValue = value
-
-	// 		if (isDraft(value)) {
-	// 			// Finalize draft values
-	// 			finalizedValue = finalizeAlternate(rootScope, value)
-	// 		} else if (isDraftable(value)) {
-	// 			// Handle non-draft objects that might contain drafts
-	// 			if (!rootScope.handledSet_) {
-	// 				rootScope.handledSet_ = new WeakSet()
-	// 			}
-	// 			handleValue(value, rootScope.handledSet_, rootScope)
-	// 			finalizedValue = value // handleValue modifies in-place
-	// 		}
-
-	// 		// Add the finalized value back to the set
-	// 		setCopy.add(finalizedValue)
-	// 	})
-	// } else {
-	// 	// Object/Array - use the existing finalizeAssigned approach
-	// 	const proxyState = state as ProxyObjectState | ProxyArrayState
-	// 	Object.keys(proxyState.assigned_).forEach(key => {
-	// 		if (proxyState.assigned_[key]) {
-	// 			finalizeAssigned(state, key, rootScope)
-	// 		}
-	// 	})
-	// }
-
-	// const proxyState = state as
-	// 	| ProxyObjectState
-	// 	| ProxyArrayState
-	// 	| MapState
-	// 	| SetState
-	// if (proxyState.assigned_) {
-	// 	Object.keys(proxyState.assigned_).forEach(key => {
-	// 		if (proxyState.assigned_[key]) {
-	// 			finalizeAssigned(state, key, rootScope)
-	// 		}
-	// 	})
-	// }
-
-	// Handle non-draft objects that might contain drafts (REPLACES finalizeProperty)
-	if (!rootScope.handledSet_) {
-		rootScope.handledSet_ = new WeakSet()
-	}
-	// if (result) {
-	// 	handleValue(result, rootScope.handledSet_, rootScope)
-	// }
 
 	if (
 		!rootScope.parent_ &&
@@ -485,10 +296,6 @@ export function registerChildFinalizationCallback(
 	child: ImmerState,
 	key: string | number | symbol
 ) {
-	if (!parent.callbacks_) {
-		parent.callbacks_ = []
-	}
-
 	parent.callbacks_.push(() => {
 		const target = parent
 		const parentCopy = parent.copy_ || parent.base_
@@ -520,7 +327,6 @@ export function registerChildFinalizationCallback(
 			debugLog("State not modified: ", state)
 			maybeFreeze(rootScope, state.base_, true)
 
-			// set(parentCopy, key, state.base_)
 			const currentValue = get(parentCopy, key)
 			const isMultipleReference =
 				currentValue === state.draft_ && state.base_ !== currentValue
@@ -529,7 +335,7 @@ export function registerChildFinalizationCallback(
 				// Multiple reference case - revert to base object
 				set(parentCopy, key, state.base_)
 			}
-			// return state.base_
+
 			return
 		}
 
@@ -545,14 +351,7 @@ export function registerChildFinalizationCallback(
 			const childCopy = get(parentCopy, key)
 			updatedValue = isDraft(childCopy) ? state.copy_ : childCopy
 		}
-		// if (isDraft(childCopy)) {
-		// 	// childCopy is still a draft - use the draft's finalized copy
-		// 	updatedValue = state.copy_
-		// } else {
-		// 	// childCopy is already a finalized plain object - use it directly
-		// 	updatedValue = childCopy
-		// }
-		// let updatedValue = state.copy_
+
 		debugLog("Callback finalizing value", {
 			key,
 			updatedValue,
@@ -563,48 +362,7 @@ export function registerChildFinalizationCallback(
 
 		finalizeSetValue(state)
 
-		// let isSet = false
-		// if (state.type_ === ArchType.Set) {
-		// 	updatedValue = new Set(updatedValue)
-		// 	// updatedValue.clear()
-		// 	// isSet = true
-		// }
-
 		set(parentCopy, key, updatedValue)
-
-		// Get current value from parent's copy
-		// const parentCopy = parent.copy_ || parent.base_
-		// const currentValue = get(parentCopy, key)
-
-		// debugLog("Finalizing value", {key, currentValue, child})
-
-		// // Check if it's still our child draft
-		// if (currentValue && currentValue[DRAFT_STATE] === child) {
-		// 	// Determine final value based on child's operated status
-		// 	let finalValue
-		// 	if (child.modified_) {
-		// 		// Child was modified, use finalized copy
-		// 		finalValue = finalizeWithCallbacks(child, rootScope)
-		// 	} else {
-		// 		// Child was not modified, use original
-		// 		finalValue = child.base_
-		// 	}
-
-		// 	// Update parent's copy with finalized value
-		// 	if (!parent.copy_) {
-		// 		prepareCopy(parent)
-		// 	}
-		// 	// parent.copy_![key] = finalValue
-		// 	set(parent.copy_, key, finalValue)
-		// }
-		// debugLog("Child callbacks: ", child.callbacks_)
-
-		// if (child.callbacks_) {
-		// 	child.callbacks_.forEach(callback => {
-		// 		debugLog("Child callback: ", callback.toString())
-		// 		callback()
-		// 	})
-		// }
 	})
 }
 
@@ -626,39 +384,6 @@ export function finalizeSetValue(target: ImmerState) {
 			target.copy_!.add(getValue(value))
 		})
 	}
-}
-
-export function finalizeWithCallbacks(
-	state: ImmerState,
-	rootScope: ImmerScope
-): any {
-	// Early return for unmodified drafts
-	if (!state.modified_) {
-		return state.base_
-	}
-
-	// Prevent double finalization
-	if (state.finalized_) {
-		return state.copy_
-	}
-
-	// Execute all registered callbacks
-	if (state.callbacks_) {
-		while (state.callbacks_.length > 0) {
-			const callback = state.callbacks_.pop()!
-			callback()
-		}
-	}
-
-	// Mark as finalized
-	state.finalized_ = true
-
-	// Handle non-draft objects that might contain drafts
-	if (state.copy_) {
-		handleValue(state.copy_, state.scope_.handledSet_, rootScope)
-	}
-
-	return state.copy_ || state.base_
 }
 
 export function handleValue(
@@ -709,13 +434,6 @@ export function handleValue(
 				})
 
 				set(target, key, updatedValue)
-				// if (isSet) {
-				// 	setMap!.set(value, updatedValue)
-				// } else if (isMap) {
-				// 	;(target as Map<any, any>).set(key, updatedValue)
-				// } else {
-				// 	target[key] = updatedValue
-				// }
 			}
 		} else if (isDraftable(value)) {
 			// Recursively handle nested values

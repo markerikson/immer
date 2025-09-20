@@ -18,8 +18,6 @@ import {
 	createProxy,
 	ArchType,
 	ImmerScope,
-	registerChildFinalizationCallback,
-	finalizeWithCallbacks,
 	isDraft,
 	handleValue,
 	get,
@@ -58,10 +56,8 @@ type ProxyState = ProxyObjectState | ProxyArrayState
  * The second argument is the parent draft-state (used internally).
  */
 export function createProxyProxy<T extends Objectish>(
-	rootScope: ImmerScope,
 	base: T,
-	parent?: ImmerState,
-	key?: string | number | symbol
+	parent?: ImmerState
 ): Drafted<T, ProxyState> {
 	const isArray = Array.isArray(base)
 	const state: ProxyState = {
@@ -85,10 +81,7 @@ export function createProxyProxy<T extends Objectish>(
 		// Called by the `produce` function.
 		revoke_: null as any,
 		isManual_: false,
-		// New callback system fields
-		// operated_: false,
 		callbacks_: parent?.callbacks_ ?? [],
-		key_: key,
 		revoked_: false
 	}
 
@@ -111,20 +104,6 @@ export function createProxyProxy<T extends Objectish>(
 	state.draft_ = proxy as any
 	state.revoke_ = revoke
 
-	// if (parent && key !== undefined) {
-	// 	debugLog("Registering child finalization callback", {
-	// 		key,
-	// 		base
-	// 	})
-	// 	registerChildFinalizationCallback(rootScope, parent, state, key)
-	// } else {
-	// 	// It's a root draft, register it with the scope
-	// 	state.callbacks_ = []
-	// 	state.callbacks_.push(() => {
-	// 		debugLog("Finalizing root draft", state.base_)
-	// 	})
-	// }
-
 	return proxy as any
 }
 
@@ -143,9 +122,7 @@ export const objectTraps: ProxyHandler<ProxyState> = {
 
 		const source = latest(state)
 		// debugLog("Object get", {key: prop})
-		if (prop === "base_") {
-			console.trace("Base accessed", {state, prop})
-		}
+
 		if (!has(source, prop)) {
 			// non-existing or non-own property...
 			return readPropFromProto(state, source, prop)
@@ -158,8 +135,7 @@ export const objectTraps: ProxyHandler<ProxyState> = {
 		// Assigned values are never drafted. This catches any drafts we created, too.
 		if (value === peek(state.base_, prop)) {
 			prepareCopy(state)
-			// return (state.copy_![prop as any] = createProxy(value, state))
-			const childDraft = createProxy(state.scope_, value, state, prop) // Pass key
+			const childDraft = createProxy(state.scope_, value, state, prop)
 			return (state.copy_![prop as any] = childDraft)
 		}
 		return value
@@ -213,7 +189,6 @@ export const objectTraps: ProxyHandler<ProxyState> = {
 		state.copy_![prop] = value
 		state.assigned_[prop] = true
 
-		// Handle cross-draft references (equivalent to Mutative's markFinalization)
 		handleCrossReference(state, prop, value)
 		return true
 	},
@@ -320,8 +295,6 @@ function getDescriptorFromProto(
 export function markChanged(state: ImmerState) {
 	if (!state.modified_) {
 		state.modified_ = true
-		// Set operated flag for callback system
-		// state.operated_ = true
 		if (state.parent_) {
 			markChanged(state.parent_)
 		}
@@ -353,9 +326,6 @@ function handleCrossReference(
 		// debugLog("Handling cross-reference", {key, value, valueDraft, target})
 		if (valueDraft.scope_ === target.scope_) {
 			// Register callback to update this location when the draft finalizes
-			if (!valueDraft.callbacks_) {
-				valueDraft.callbacks_ = []
-			}
 
 			debugLog("Pushing callback to child draft", {key})
 			valueDraft.callbacks_.push(() => {
@@ -378,10 +348,7 @@ function handleCrossReference(
 			})
 		}
 	} else if (isDraftable(value)) {
-		// NEW: Handle non-draft objects that might contain drafts
-		if (!target.callbacks_) {
-			target.callbacks_ = []
-		}
+		// Handle non-draft objects that might contain drafts
 		debugLog("Pushing callback to handle nested drafts", {key})
 		target.callbacks_.push(() => {
 			const targetCopy = target.copy_ || target.base_
@@ -389,7 +356,6 @@ function handleCrossReference(
 			if (get(targetCopy, key) === value) {
 				debugLog("Handling nested drafts", {key, value})
 				// Process the value to replace any nested drafts
-				//handleValue(value, new WeakSet(), target.scope_)
 				finalizeAssigned(target, key, target.scope_)
 			}
 		})
@@ -401,18 +367,13 @@ export function finalizeAssigned(
 	key: PropertyKey,
 	rootScope: ImmerScope
 ) {
-	// Equivalent to Mutative's conditional checks
 	const copy = state.copy_
 	debugLog("finalizeAssigned", {key, copy, state})
 	if (
-		rootScope.drafts_.length > 1 && // Multiple finalization contexts (equivalent to revoke.length > 1)
+		rootScope.drafts_.length > 1 &&
 		has((state as Exclude<ImmerState, SetState>).assigned_!, key) &&
-		//state.assigned_?.[key] &&         // The key was actually assigned
-		copy // Copy exists
+		state.copy_
 	) {
-		if (!rootScope.handledSet_) {
-			rootScope.handledSet_ = new WeakSet()
-		}
-		handleValue(get(copy, key), rootScope.handledSet_, rootScope)
+		handleValue(get(state.copy_, key), rootScope.handledSet_, rootScope)
 	}
 }

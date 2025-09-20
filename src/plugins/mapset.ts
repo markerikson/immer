@@ -14,9 +14,7 @@ import {
 	markChanged,
 	die,
 	ArchType,
-	each,
-	registerChildFinalizationCallback,
-	ImmerScope
+	each
 } from "../internal"
 
 export function enableMapSet() {
@@ -37,10 +35,7 @@ export function enableMapSet() {
 				draft_: this as any,
 				isManual_: false,
 				revoked_: false,
-
-				// operated_: false,
-				callbacks_: [],
-				key_: undefined // Maps don't have keys in their parent
+				callbacks_: []
 			}
 			// debugLog("Draft map: ", target)
 		}
@@ -196,10 +191,7 @@ export function enableMapSet() {
 				drafts_: new Map(),
 				revoked_: false,
 				isManual_: false,
-
-				// operated_: false,
-				callbacks_: [],
-				key_: undefined // Sets don't have keys in their parent
+				callbacks_: []
 			}
 
 			// debugLog("Draft set:", target)

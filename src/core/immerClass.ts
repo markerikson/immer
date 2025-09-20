@@ -248,12 +248,14 @@ export function createProxy<T extends Objectish>(
 		? getPlugin("MapSet").proxyMap_(value, parent)
 		: isSet(value)
 		? getPlugin("MapSet").proxySet_(value, parent)
-		: createProxyProxy(rootScope, value, parent, key)
+		: createProxyProxy(value, parent)
 
 	const scope = parent ? parent.scope_ : getCurrentScope()
 	scope.drafts_.push(draft)
 	const state: ImmerState = draft[DRAFT_STATE]
 
+	// Ensure the parent callbacks are passed down so we actually
+	// track all callbacks added throughout the tree
 	state.callbacks_ = parent?.callbacks_ ?? []
 
 	if (parent && key !== undefined) {
@@ -265,7 +267,7 @@ export function createProxy<T extends Objectish>(
 	} else {
 		// It's a root draft, register it with the scope
 		debugLog("Registering root draft with scope")
-		state.callbacks_ = []
+
 		state.callbacks_.push(() => {
 			// debugLog("Finalizing root draft")
 			if (state.type_ === ArchType.Set && state.modified_) {
