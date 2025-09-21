@@ -268,7 +268,7 @@ export function createProxy<T extends Objectish>(
 		// It's a root draft, register it with the scope
 		debugLog("Registering root draft with scope")
 
-		state.callbacks_.push(() => {
+		state.callbacks_.push(function rootDraftCleanup() {
 			// debugLog("Finalizing root draft")
 			if (state.type_ === ArchType.Set && state.modified_) {
 				const copy = new Set(state.copy_!)

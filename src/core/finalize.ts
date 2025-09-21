@@ -286,7 +286,7 @@ export function registerChildFinalizationCallback(
 	child: ImmerState,
 	key: string | number | symbol
 ) {
-	parent.callbacks_.push(() => {
+	parent.callbacks_.push(function childCleanup() {
 		const target = parent
 		const parentCopy = parent.copy_ || parent.base_
 		const childCopy = get(parentCopy, key)

@@ -328,8 +328,11 @@ function handleCrossReference(
 			// Register callback to update this location when the draft finalizes
 
 			debugLog("Pushing callback to child draft", {key})
-			valueDraft.callbacks_.push(() => {
-				debugLog("Child draft finalized, updating parent", {key})
+			valueDraft.callbacks_.push(function crossReferenceCleanup() {
+				debugLog("crossReferenceCleanup: executing callback", {
+					key,
+					targetCopy: target.copy_ || target.base_
+				})
 				// Update the target location with finalized value
 				const targetCopy = target.copy_ || target.base_
 				if (targetCopy[key] === value) {
@@ -350,7 +353,7 @@ function handleCrossReference(
 	} else if (isDraftable(value)) {
 		// Handle non-draft objects that might contain drafts
 		debugLog("Pushing callback to handle nested drafts", {key})
-		target.callbacks_.push(() => {
+		target.callbacks_.push(function nestedDraftCleanup() {
 			const targetCopy = target.copy_ || target.base_
 
 			if (get(targetCopy, key) === value) {
