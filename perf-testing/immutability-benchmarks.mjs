@@ -9,29 +9,37 @@ import {produce as produce9, setAutoFreeze as setAutoFreeze9} from "immer9"
 import {produce as produce10, setAutoFreeze as setAutoFreeze10} from "immer10"
 import {
 	produce as produce10Perf,
-	setAutoFreeze as setAutoFreeze10Perf
+	setAutoFreeze as setAutoFreeze10Perf,
 	// Uncomment when using a build of Immer that exposes this function,
 	// and enable the corresponding line in the setStrictIteration object below.
-	// setUseStrictIteration as setUseStrictIteration10Perf
+	setUseStrictIteration as setUseStrictIteration10Perf
 } from "immer10Perf"
 import {create as produceMutative} from "mutative"
 import {
 	produce as produceMutativeCompat,
 	setAutoFreeze as setAutoFreezeMutativeCompat
 } from "mutative-compat"
+import {
+	produce as produceStructura,
+	enableAutoFreeze as setAutoFreezeStructura
+} from "structurajs"
+import {produce as produceLimu, setAutoFreeze as setAutoFreezeLimu} from "limu"
 import {bench, run, group, summary} from "mitata"
 
-function createInitialState() {
+function createInitialState(arraySize = BENCHMARK_CONFIG.arraySize) {
 	const initialState = {
-		largeArray: Array.from({length: 10000}, (_, i) => ({
+		largeArray: Array.from({length: arraySize}, (_, i) => ({
 			id: i,
 			value: Math.random(),
 			nested: {key: `key-${i}`, data: Math.random()},
 			moreNested: {
-				items: Array.from({length: 100}, (_, i) => ({id: i, name: String(i)}))
+				items: Array.from(
+					{length: BENCHMARK_CONFIG.nestedArraySize},
+					(_, i) => ({id: i, name: String(i)})
+				)
 			}
 		})),
-		otherData: Array.from({length: 10000}, (_, i) => ({
+		otherData: Array.from({length: arraySize}, (_, i) => ({
 			id: i,
 			name: `name-${i}`,
 			isActive: i % 2 === 0
@@ -41,6 +49,14 @@ function createInitialState() {
 }
 
 const MAX = 1
+
+const BENCHMARK_CONFIG = {
+	iterations: 1,
+	arraySize: 10000,
+	nestedArraySize: 100,
+	multiUpdateCount: 5,
+	reuseStateIterations: 10
+}
 
 const add = index => ({
 	type: "test/addItem",
@@ -57,24 +73,54 @@ const concat = index => ({
 	payload: Array.from({length: 500}, (_, i) => ({id: i, value: index}))
 })
 
+const updateHigh = index => ({
+	type: "test/updateHighIndex",
+	payload: {
+		id:
+			Math.floor(BENCHMARK_CONFIG.arraySize * 0.8) +
+			(index % Math.floor(BENCHMARK_CONFIG.arraySize * 0.2)),
+		value: index,
+		nestedData: index
+	}
+})
+const updateMultiple = index => ({
+	type: "test/updateMultiple",
+	payload: Array.from({length: BENCHMARK_CONFIG.multiUpdateCount}, (_, i) => ({
+		id: (index + i) % BENCHMARK_CONFIG.arraySize,
+		value: index + i,
+		nestedData: index + i
+	}))
+})
+const removeHigh = index => ({
+	type: "test/removeHighIndex",
+	payload:
+		Math.floor(BENCHMARK_CONFIG.arraySize * 0.8) +
+		(index % Math.floor(BENCHMARK_CONFIG.arraySize * 0.2))
+})
+
 const actions = {
 	add,
 	remove,
 	filter,
 	update,
-	concat
+	concat,
+	updateHigh,
+	updateMultiple,
+	removeHigh
 }
 
 const immerProducers = {
-	// immer5: produce5,
-	// immer6: produce6,
+	immer5: produce5,
+	immer6: produce6,
 	immer7: produce7,
 	immer8: produce8,
 	immer9: produce9,
 	immer10: produce10,
-	immer10Perf: produce10Perf
-	// mutative: produceMutative,
-	// mutativeCompat: produceMutativeCompat
+	immer10Perf: produce10Perf,
+	mutative: produceMutative,
+	mutativeCompat: produceMutativeCompat,
+	structura: produceStructura,
+	limu: produceLimu
 }
 
 const noop = () => {}
@@ -89,7 +135,9 @@ const setAutoFreezes = {
 	immer10: setAutoFreeze10,
 	immer10Perf: setAutoFreeze10Perf,
 	mutative: noop,
-	mutativeCompat: setAutoFreezeMutativeCompat
+	mutativeCompat: setAutoFreezeMutativeCompat,
+	structura: setAutoFreezeStructura,
+	limu: setAutoFreezeLimu
 }
 
 const setStrictIteration = {
@@ -100,9 +148,11 @@ const setStrictIteration = {
 	immer8: noop,
 	immer9: noop,
 	immer10: noop,
-	immer10Perf: noop, // setUseStrictIteration10Perf,
+	immer10Perf: setUseStrictIteration10Perf,
 	mutative: noop,
-	mutativeCompat: noop
+	mutativeCompat: noop,
+	structura: noop,
+	limu: noop
 }
 
 const vanillaReducer = (state = createInitialState(), action) => {
@@ -152,6 +202,49 @@ const vanillaReducer = (state = createInitialState(), action) => {
 				largeArray: newArray
 			}
 		}
+		case "test/updateHighIndex": {
+			return {
+				...state,
+				largeArray: state.largeArray.map(item =>
+					item.id === action.payload.id
+						? {
+								...item,
+								value: action.payload.value,
+								nested: {...item.nested, data: action.payload.nestedData}
+						  }
+						: item
+				)
+			}
+		}
+		case "test/updateMultiple": {
+			const updates = new Map(action.payload.map(p => [p.id, p]))
+			return {
+				...state,
+				largeArray: state.largeArray.map(item => {
+					const update = updates.get(item.id)
+					return update
+						? {
+								...item,
+								value: update.value,
+								nested: {...item.nested, data: update.nestedData}
+						  }
+						: item
+				})
+			}
+		}
+		case "test/removeHighIndex": {
+			const newArray = state.largeArray.slice()
+			const indexToRemove = newArray.findIndex(
+				item => item.id === action.payload
+			)
+			if (indexToRemove !== -1) {
+				newArray.splice(indexToRemove, 1)
+			}
+			return {
+				...state,
+				largeArray: newArray
+			}
+		}
 		default:
 			return state
 	}
@@ -188,6 +281,35 @@ const createImmerReducer = produce => {
 					draft.largeArray = newArray
 					break
 				}
+				case "test/updateHighIndex": {
+					const item = draft.largeArray.find(
+						item => item.id === action.payload.id
+					)
+					if (item) {
+						item.value = action.payload.value
+						item.nested.data = action.payload.nestedData
+					}
+					break
+				}
+				case "test/updateMultiple": {
+					action.payload.forEach(update => {
+						const item = draft.largeArray.find(item => item.id === update.id)
+						if (item) {
+							item.value = update.value
+							item.nested.data = update.nestedData
+						}
+					})
+					break
+				}
+				case "test/removeHighIndex": {
+					const indexToRemove = draft.largeArray.findIndex(
+						item => item.id === action.payload
+					)
+					if (indexToRemove !== -1) {
+						draft.largeArray.splice(indexToRemove, 1)
+					}
+					break
+				}
 			}
 		})
 
@@ -208,6 +330,7 @@ const reducers = {
 }
 
 function createBenchmarks() {
+	// All single-operation benchmarks (fresh state each time)
 	for (const action in actions) {
 		summary(function() {
 			bench(`$action: $version (freeze: $freeze)`, function*(args) {
@@ -234,6 +357,66 @@ function createBenchmarks() {
 			})
 		})
 	}
+
+	// State reuse benchmarks (tests performance on frozen/evolved state)
+	const reuseActions = ["update", "updateHigh", "remove", "removeHigh"]
+	for (const action of reuseActions) {
+		summary(function() {
+			bench(`$action-reuse: $version (freeze: $freeze)`, function*(args) {
+				const version = args.get("version")
+				const freeze = args.get("freeze")
+				const action = args.get("action")
+
+				function benchMethod() {
+					setAutoFreezes[version](freeze)
+					setStrictIteration[version](false)
+
+					let currentState = createInitialState()
+
+					// Perform multiple operations on the same evolving state
+					for (let i = 0; i < BENCHMARK_CONFIG.reuseStateIterations; i++) {
+						currentState = reducers[version](currentState, actions[action](i))
+					}
+					setAutoFreezes[version](false)
+				}
+
+				yield benchMethod
+			}).args({
+				version: Object.keys(reducers),
+				freeze: [false, true],
+				action: [action]
+			})
+		})
+	}
+
+	// Mixed operations sequence benchmark
+	summary(function() {
+		bench(`mixed-sequence: $version (freeze: $freeze)`, function*(args) {
+			const version = args.get("version")
+			const freeze = args.get("freeze")
+
+			function benchMethod() {
+				setAutoFreezes[version](freeze)
+				setStrictIteration[version](false)
+
+				let state = createInitialState()
+
+				// Perform a sequence of different operations (typical workflow)
+				state = reducers[version](state, actions.add(1))
+				state = reducers[version](state, actions.update(500))
+				state = reducers[version](state, actions.updateHigh(2))
+				state = reducers[version](state, actions.updateMultiple(3))
+				state = reducers[version](state, actions.remove(100))
+
+				setAutoFreezes[version](false)
+			}
+
+			yield benchMethod
+		}).args({
+			version: Object.keys(reducers),
+			freeze: [false, true]
+		})
+	})
 }
 
 async function main() {
