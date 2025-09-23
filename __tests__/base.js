@@ -273,12 +273,21 @@ function runBaseTest(name, autoFreeze, useStrictShallowCopy, useListener) {
 			})
 
 			it("can be sorted", () => {
-				const baseState = [3, 1, 2]
+				const baseState = [{value: 3}, {value: 1}, {value: 2}]
 				const nextState = produce(baseState, s => {
-					s.sort()
+					s.sort((a, b) => a.value - b.value)
 				})
 				expect(nextState).not.toBe(baseState)
-				expect(nextState).toEqual([1, 2, 3])
+				expect(nextState).toEqual([{value: 1}, {value: 2}, {value: 3}])
+			})
+
+			it("can be reversed", () => {
+				const baseState = [{value: 1}, {value: 2}, {value: 3}]
+				const nextState = produce(baseState, s => {
+					s.reverse()
+				})
+				expect(nextState).not.toBe(baseState)
+				expect(nextState).toEqual([{value: 3}, {value: 2}, {value: 1}])
 			})
 
 			it("supports modifying nested objects", () => {
