@@ -17,8 +17,7 @@ import {
 	revokeScope,
 	isFrozen,
 	isMap,
-	get,
-	deepFreeze
+	get
 } from "../internal"
 import {debugLog} from "../internal"
 import util from "util"
@@ -35,7 +34,6 @@ export function processResult(result: any, scope: ImmerScope) {
 		if (isDraftable(result)) {
 			// Finalize the result in case it contains (or is) a subset of the draft.
 			result = finalizeAlternate(scope, result)
-			// if (!scope.parent_) maybeFreeze(scope, result)
 		}
 		if (scope.patches_) {
 			getPlugin("Patches").generateReplacementPatches_(
@@ -51,10 +49,6 @@ export function processResult(result: any, scope: ImmerScope) {
 	}
 
 	maybeFreeze(scope, result, true)
-
-	// if (!scope.parent_ && scope.immer_.autoFreeze_ && scope.canAutoFreeze_) {
-	// 	(result, result, scope.updatedValues_)
-	// }
 
 	revokeScope(scope)
 	if (scope.patches_) {
@@ -101,8 +95,6 @@ function finalizeAlternate(
 		state.finalized_ = true
 		state.scope_.unfinalizedDrafts_--
 
-		state.scope_.updatedValues_ = new WeakMap()
-
 		// Execute all registered callbacks
 		if (state.callbacks_) {
 			while (state.callbacks_.length > 0) {
@@ -112,17 +104,6 @@ function finalizeAlternate(
 		}
 
 		const result = state.copy_
-
-		if (
-			!rootScope.parent_ &&
-			rootScope.immer_.autoFreeze_ &&
-			rootScope.canAutoFreeze_
-		) {
-			// maybeFreeze(rootScope, state.base_, true)
-		}
-
-		// Preserve existing freezing logic
-		// maybeFreeze(rootScope, result, false)
 
 		// Preserve existing patch generation logic
 		if (path && rootScope.patches_) {
@@ -286,8 +267,7 @@ function finalizeProperty(
 function maybeFreeze(scope: ImmerScope, value: any, deep = false) {
 	// we never freeze for a non-root scope; as it would prevent pruning for drafts inside wrapping objects
 	if (!scope.parent_ && scope.immer_.autoFreeze_ && scope.canAutoFreeze_) {
-		// freeze(value, deep, scope.updatedValues_)
-		freeze(value, deep, scope.updatedValues_)
+		freeze(value, deep)
 	}
 }
 
@@ -298,7 +278,6 @@ export function registerChildFinalizationCallback(
 	key: string | number | symbol
 ) {
 	parent.callbacks_.push(function childCleanup() {
-		const target = parent
 		const parentCopy = parent.copy_ || parent.base_
 		const childCopy = get(parentCopy, key)
 		const state: ImmerState = child
@@ -351,15 +330,6 @@ export function registerChildFinalizationCallback(
 			// For Maps/Objects, use lookup logic
 			const childCopy = get(parentCopy, key)
 			updatedValue = isDraft(childCopy) ? state.copy_ : childCopy
-		}
-
-		if (
-			rootScope.immer_.autoFreeze_ &&
-			state.modified_ &&
-			typeof updatedValue === "object" &&
-			updatedValue !== null
-		) {
-			rootScope.updatedValues_?.set(updatedValue, state.base_)
 		}
 
 		debugLog("Callback finalizing value", {
