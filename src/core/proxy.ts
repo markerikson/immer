@@ -319,7 +319,7 @@ function handleCrossReference(
 	key: string | number | symbol,
 	value: any
 ) {
-	debugLog("handleCrossReference", {key, value, target})
+	// debugLog("handleCrossReference", {key, value, target})
 	// Check if value is a draft from this scope
 	if (isDraft(value)) {
 		const valueDraft: ImmerState = value[DRAFT_STATE]
@@ -327,12 +327,12 @@ function handleCrossReference(
 		if (valueDraft.scope_ === target.scope_) {
 			// Register callback to update this location when the draft finalizes
 
-			debugLog("Pushing callback to child draft", {key})
+			// debugLog("Pushing callback to child draft", {key})
 			valueDraft.callbacks_.push(function crossReferenceCleanup() {
-				debugLog("crossReferenceCleanup: executing callback", {
-					key,
-					targetCopy: target.copy_ || target.base_
-				})
+				// debugLog("crossReferenceCleanup: executing callback", {
+				// 	key,
+				// 	targetCopy: target.copy_ || target.base_
+				// })
 				// Update the target location with finalized value
 				const targetCopy = target.copy_ || target.base_
 				if (targetCopy[key] === value) {
@@ -352,12 +352,12 @@ function handleCrossReference(
 		}
 	} else if (isDraftable(value)) {
 		// Handle non-draft objects that might contain drafts
-		debugLog("Pushing callback to handle nested drafts", {key})
+		// debugLog("Pushing callback to handle nested drafts", {key})
 		target.callbacks_.push(function nestedDraftCleanup() {
 			const targetCopy = target.copy_ || target.base_
 
 			if (get(targetCopy, key) === value) {
-				debugLog("Handling nested drafts", {key, value})
+				// debugLog("Handling nested drafts", {key, value})
 				// Process the value to replace any nested drafts
 				finalizeAssigned(target, key, target.scope_)
 			}
@@ -371,7 +371,7 @@ export function finalizeAssigned(
 	rootScope: ImmerScope
 ) {
 	const copy = state.copy_
-	debugLog("finalizeAssigned", {key, copy, state})
+	// debugLog("finalizeAssigned", {key, copy, state})
 	if (
 		rootScope.drafts_.length > 1 &&
 		has((state as Exclude<ImmerState, SetState>).assigned_!, key) &&

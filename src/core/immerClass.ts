@@ -259,14 +259,14 @@ export function createProxy<T extends Objectish>(
 	state.callbacks_ = parent?.callbacks_ ?? []
 
 	if (parent && key !== undefined) {
-		debugLog("Registering child finalization callback", {
-			key,
-			type: archTypeToString(state.type_)
-		})
+		// debugLog("Registering child finalization callback", {
+		// 	key,
+		// 	type: archTypeToString(state.type_)
+		// })
 		registerChildFinalizationCallback(rootScope, parent, state, key)
 	} else {
 		// It's a root draft, register it with the scope
-		debugLog("Registering root draft with scope")
+		// debugLog("Registering root draft with scope")
 
 		state.callbacks_.push(function rootDraftCleanup() {
 			// debugLog("Finalizing root draft")
