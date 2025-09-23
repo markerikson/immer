@@ -16,11 +16,15 @@ export const getPrototypeOf = Object.getPrototypeOf
 
 const ENABLE_LOGGING = false
 
-export const debugLog: typeof console.log = (...args) => {
+const noop: typeof console.log = () => {}
+
+export const debugLogger: typeof console.log = (...args) => {
 	if (ENABLE_LOGGING) {
 		console.log(new Date(), ...args)
 	}
 }
+
+export const debugLog = noop
 
 /** Returns true if the given value is an Immer draft */
 /*#__PURE__*/
@@ -74,6 +78,7 @@ export function isPlainObjectOriginal(value: any): boolean {
 
 const cachedCtorStrings = new WeakMap()
 function isPlainObjectCached(value: any) {
+	// console.trace("isPlainObject: ", {value})
 	if (!value || typeof value !== "object") return false
 	const proto = Object.getPrototypeOf(value)
 	if (proto === null || proto === Object.prototype) return true
@@ -237,6 +242,13 @@ export function shallowCopy(base: any, strict: StrictMode) {
 	}
 }
 
+const alreadyFrozenMapSetProperties = {
+	set: {value: dontMutateFrozenCollections as any},
+	add: {value: dontMutateFrozenCollections as any},
+	clear: {value: dontMutateFrozenCollections as any},
+	delete: {value: dontMutateFrozenCollections as any}
+}
+
 /**
  * Freezes draftable objects. Returns the original object.
  * By default freezes shallowly, but if the second argument is `true` it will freeze recursively.
@@ -244,29 +256,85 @@ export function shallowCopy(base: any, strict: StrictMode) {
  * @param obj
  * @param deep
  */
-export function freeze<T>(obj: T, deep?: boolean): T
-export function freeze<T>(obj: any, deep: boolean = false): T {
-	if (isFrozen(obj) || isDraft(obj) || !isDraftable(obj)) return obj
+export function freeze<T>(
+	obj: T,
+	deep?: boolean,
+	updatedValues?: WeakMap<any, any>
+): T
+export function freeze<T>(
+	obj: any,
+	deep: boolean = false,
+	updatedValues?: WeakMap<any, any>
+): T {
+	const valueToCheck = updatedValues?.has(obj) ? updatedValues.get(obj) : obj
+
+	if (
+		isFrozen(valueToCheck) ||
+		isDraft(obj)
+		// || !isDraftable(obj)
+	)
+		return obj
 	if (getArchtype(obj) > 1 /* Map or Set */) {
-		Object.defineProperties(obj, {
-			set: {value: dontMutateFrozenCollections as any},
-			add: {value: dontMutateFrozenCollections as any},
-			clear: {value: dontMutateFrozenCollections as any},
-			delete: {value: dontMutateFrozenCollections as any}
-		})
+		Object.defineProperties(obj, alreadyFrozenMapSetProperties)
 	}
 	Object.freeze(obj)
 	if (deep)
 		// See #590, don't recurse into non-enumerable / Symbol properties when freezing
 		// So use Object.values (only string-like, enumerables) instead of each()
-		Object.values(obj).forEach(value => freeze(value, true))
+		Object.values(obj).forEach(value => freeze(value, true, updatedValues))
 	return obj
+}
+
+export function deepFreeze(
+	target: any,
+	deep: boolean = false,
+	updatedValues?: WeakMap<any, any>
+) {
+	if (isFrozen(target) || isDraft(target)) {
+		return
+	}
+	const type = getArchtype(target)
+	switch (type) {
+		case ArchType.Map:
+			for (const [key, value] of target) {
+				if (isFreezable(key)) deepFreeze(key, deep, updatedValues)
+				if (isFreezable(value)) deepFreeze(value, deep, updatedValues)
+			}
+			target.set = target.clear = target.delete = dontMutateFrozenCollections
+			break
+		case ArchType.Set:
+			for (const value of target) {
+				if (isFreezable(value)) deepFreeze(value, deep, updatedValues)
+			}
+			target.add = target.clear = target.delete = dontMutateFrozenCollections
+			break
+		case ArchType.Array:
+			Object.freeze(target)
+			let index = 0
+			for (const value of target) {
+				if (isFreezable(value)) deepFreeze(value, deep, updatedValues)
+				index += 1
+			}
+			break
+		default:
+			Object.freeze(target)
+			// ignore non-enumerable or symbol properties
+			each(target, (name, value) => {
+				if (isFreezable(value)) deepFreeze(value, deep, updatedValues)
+			})
+	}
 }
 
 function dontMutateFrozenCollections() {
 	die(2)
 }
 
+function isFreezable(value: any) {
+	return value && typeof value === "object" && !Object.isFrozen(value)
+}
+
 export function isFrozen(obj: any): boolean {
+	// Fast path: primitives and null/undefined are always "frozen"
+	if (obj === null || typeof obj !== "object") return true
 	return Object.isFrozen(obj)
 }

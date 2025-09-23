@@ -17,7 +17,8 @@ import {
 	revokeScope,
 	isFrozen,
 	isMap,
-	get
+	get,
+	deepFreeze
 } from "../internal"
 import {debugLog} from "../internal"
 import util from "util"
@@ -34,7 +35,7 @@ export function processResult(result: any, scope: ImmerScope) {
 		if (isDraftable(result)) {
 			// Finalize the result in case it contains (or is) a subset of the draft.
 			result = finalizeAlternate(scope, result)
-			if (!scope.parent_) maybeFreeze(scope, result)
+			// if (!scope.parent_) maybeFreeze(scope, result)
 		}
 		if (scope.patches_) {
 			getPlugin("Patches").generateReplacementPatches_(
@@ -48,6 +49,13 @@ export function processResult(result: any, scope: ImmerScope) {
 		// Finalize the base draft.
 		result = finalizeAlternate(scope, baseDraft, [])
 	}
+
+	maybeFreeze(scope, result, true)
+
+	// if (!scope.parent_ && scope.immer_.autoFreeze_ && scope.canAutoFreeze_) {
+	// 	(result, result, scope.updatedValues_)
+	// }
+
 	revokeScope(scope)
 	if (scope.patches_) {
 		scope.patchListener_!(scope.patches_, scope.inversePatches_!)
@@ -85,13 +93,15 @@ function finalizeAlternate(
 	// Unmodified draft, return the (frozen) original
 	if (!state.modified_) {
 		debugLog("State not modified: ", state)
-		maybeFreeze(rootScope, state.base_, true)
+		// maybeFreeze(rootScope, state.base_, true)
 		return state.base_
 	}
 	// REPLACE: Not finalized yet, use callback-based finalization
 	if (!state.finalized_) {
 		state.finalized_ = true
 		state.scope_.unfinalizedDrafts_--
+
+		state.scope_.updatedValues_ = new WeakMap()
 
 		// Execute all registered callbacks
 		if (state.callbacks_) {
@@ -108,11 +118,11 @@ function finalizeAlternate(
 			rootScope.immer_.autoFreeze_ &&
 			rootScope.canAutoFreeze_
 		) {
-			maybeFreeze(rootScope, state.base_, true)
+			// maybeFreeze(rootScope, state.base_, true)
 		}
 
 		// Preserve existing freezing logic
-		maybeFreeze(rootScope, result, false)
+		// maybeFreeze(rootScope, result, false)
 
 		// Preserve existing patch generation logic
 		if (path && rootScope.patches_) {
@@ -276,7 +286,8 @@ function finalizeProperty(
 function maybeFreeze(scope: ImmerScope, value: any, deep = false) {
 	// we never freeze for a non-root scope; as it would prevent pruning for drafts inside wrapping objects
 	if (!scope.parent_ && scope.immer_.autoFreeze_ && scope.canAutoFreeze_) {
-		freeze(value, deep)
+		// freeze(value, deep, scope.updatedValues_)
+		freeze(value, deep, scope.updatedValues_)
 	}
 }
 
@@ -315,7 +326,7 @@ export function registerChildFinalizationCallback(
 		// Unmodified draft, return the (frozen) original
 		if (!state.modified_) {
 			debugLog("State not modified: ", state)
-			maybeFreeze(rootScope, state.base_, true)
+			// maybeFreeze(rootScope, state.base_, true)
 
 			const currentValue = get(parentCopy, key)
 			const isMultipleReference =
@@ -340,6 +351,15 @@ export function registerChildFinalizationCallback(
 			// For Maps/Objects, use lookup logic
 			const childCopy = get(parentCopy, key)
 			updatedValue = isDraft(childCopy) ? state.copy_ : childCopy
+		}
+
+		if (
+			rootScope.immer_.autoFreeze_ &&
+			state.modified_ &&
+			typeof updatedValue === "object" &&
+			updatedValue !== null
+		) {
+			rootScope.updatedValues_?.set(updatedValue, state.base_)
 		}
 
 		debugLog("Callback finalizing value", {

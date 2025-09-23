@@ -21,6 +21,7 @@ export interface ImmerScope {
 	immer_: Immer
 	unfinalizedDrafts_: number
 	handledSet_: WeakSet<any>
+	updatedValues_?: WeakMap<any, any>
 }
 
 let currentScope: ImmerScope | undefined
@@ -42,6 +43,7 @@ function createScope(
 		canAutoFreeze_: true,
 		unfinalizedDrafts_: 0,
 		handledSet_: new WeakSet()
+		// updatedValues_ new WeakMap()
 	}
 }
 
