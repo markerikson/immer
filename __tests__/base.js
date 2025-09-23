@@ -294,7 +294,9 @@ function runBaseTest(name, autoFreeze, useStrictShallowCopy, useListener) {
 				const baseState = [{a: 1}, {}]
 				const nextState = produce(baseState, s => {
 					s[0].a++
+					s[0].a++
 					s[1].a = 0
+					s[0].a--
 				})
 				expect(nextState).not.toBe(baseState)
 				expect(nextState[0].a).toBe(2)
