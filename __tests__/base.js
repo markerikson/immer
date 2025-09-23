@@ -1093,7 +1093,7 @@ function runBaseTest(name, autoFreeze, useStrictShallowCopy, useListener) {
 		})
 
 		it("supports a base state with multiple references to an object", () => {
-			const obj = {}
+			const obj = {notEmpty: true}
 			const res = produce({a: obj, b: obj}, d => {
 				// Two drafts are created for each occurrence of an object in the base state.
 				expect(d.a).not.toBe(d.b)
