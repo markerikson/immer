@@ -290,6 +290,76 @@ function runBaseTest(name, autoFreeze, useStrictShallowCopy, useListener) {
 				expect(nextState).toEqual([{value: 3}, {value: 2}, {value: 1}])
 			})
 
+			it("can be sorted with existing proxies", () => {
+				const baseState = [{value: 3}, {value: 1}, {value: 2}]
+				const nextState = produce(baseState, s => {
+					// First mutate a nested object to create a proxy
+					s[0].value = 4
+					// Then sort the array
+					s.sort((a, b) => a.value - b.value)
+				})
+				expect(nextState).not.toBe(baseState)
+				expect(nextState).toEqual([{value: 1}, {value: 2}, {value: 4}])
+			})
+
+			it("can be reversed with existing proxies", () => {
+				const baseState = [{value: 1}, {value: 2}, {value: 3}]
+				const nextState = produce(baseState, s => {
+					// First mutate a nested object to create a proxy
+					s[1].value = 5
+					// Then reverse the array
+					s.reverse()
+				})
+				expect(nextState).not.toBe(baseState)
+				expect(nextState).toEqual([{value: 3}, {value: 5}, {value: 1}])
+			})
+
+			it("can be sorted with unmodified existing proxies", () => {
+				const baseState = [{value: 3}, {value: 1}, {value: 2}]
+				const nextState = produce(baseState, s => {
+					// Access a nested object to create a proxy, but don't modify it
+					const firstValue = s[0].value // This creates a proxy for s[0]
+					expect(firstValue).toBe(3) // But we don't modify it
+
+					// Then sort the array
+					s.sort((a, b) => a.value - b.value)
+				})
+				expect(nextState).not.toBe(baseState)
+				expect(nextState).toEqual([{value: 1}, {value: 2}, {value: 3}])
+			})
+
+			it("supports the same child reference multiple times in the same array via index assignment", () => {
+				const obj = {value: 1}
+				const baseState = {items: [obj, {}, {}, {}, {}]}
+
+				const nextState = produce(baseState, draft => {
+					// Assign the same object to multiple indices
+					draft.items[0] = obj // Original position
+					draft.items[2] = obj // Same object at different index
+					draft.items[4] = obj // Same object at yet another index
+
+					// Modify the object through one of the references
+					draft.items[0].value = 2
+				})
+
+				// Immer behavior: modified draft gets new object, unmodified drafts are optimized
+				expect(nextState.items[0]).not.toBe(nextState.items[2]) // Modified vs unmodified
+				expect(nextState.items[2]).toBe(nextState.items[4]) // Both unmodified, same reference
+				expect(nextState.items[0].value).toBe(2) // Modified
+				expect(nextState.items[2].value).toBe(1) // Unmodified (same as original)
+				expect(nextState.items[4].value).toBe(1) // Unmodified (same as original)
+
+				// The unmodified items should be the same as the original object
+				expect(nextState.items[2]).toBe(obj)
+				expect(nextState.items[4]).toBe(obj)
+
+				// Original object should be unchanged
+				expect(obj.value).toBe(1)
+
+				// Verify array structure
+				expect(nextState.items.length).toBe(5)
+			})
+
 			it("supports modifying nested objects", () => {
 				const baseState = [{a: 1}, {}]
 				const nextState = produce(baseState, s => {
