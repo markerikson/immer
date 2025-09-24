@@ -636,12 +636,12 @@ function printSummaryTable(
 
 	// Fixed column widths for consistent alignment - 9 chars content + separators
 	const scenarioWidth = 9
-	const versionWidth = 9
+	const versionWidth = 8
 
 	// Print header with 9-char content + padding
 	let header = "┌" + "─".repeat(scenarioWidth + 2)
 	for (let i = 0; i < versions.length; i++) {
-		header += "┬" + "─".repeat(versionWidth + 2)
+		header += "┬" + "─".repeat(versionWidth)
 	}
 	header += "┐"
 	console.log(header)
@@ -649,7 +649,7 @@ function printSummaryTable(
 	// Print column headers - version names
 	let headerRow1 = "│ " + "Scenario".padEnd(scenarioWidth) + " "
 	for (const vInfo of versionInfo) {
-		headerRow1 += "│ " + vInfo.name.padEnd(versionWidth) + " "
+		headerRow1 += "│" + vInfo.name.padEnd(versionWidth)
 	}
 	headerRow1 += "│"
 	console.log(headerRow1)
@@ -657,7 +657,7 @@ function printSummaryTable(
 	// Print column headers - freeze indicators
 	let headerRow2 = "│ " + "".padEnd(scenarioWidth) + " "
 	for (const vInfo of versionInfo) {
-		headerRow2 += "│ " + vInfo.freeze.padEnd(versionWidth) + " "
+		headerRow2 += "│" + vInfo.freeze.padEnd(versionWidth)
 	}
 	headerRow2 += "│"
 	console.log(headerRow2)
@@ -665,7 +665,7 @@ function printSummaryTable(
 	// Print separator
 	let separator = "├" + "─".repeat(scenarioWidth + 2)
 	for (let i = 0; i < versions.length; i++) {
-		separator += "┼" + "─".repeat(versionWidth + 2)
+		separator += "┼" + "─".repeat(versionWidth)
 	}
 	separator += "┤"
 	console.log(separator)
@@ -689,7 +689,7 @@ function printSummaryTable(
 			if (timeStr.length > versionWidth) {
 				timeStr = timeStr.substring(0, versionWidth - 1) + "…"
 			}
-			row1 += "│ " + timeStr.padEnd(versionWidth) + " "
+			row1 += "│" + timeStr.padEnd(versionWidth)
 		}
 		row1 += "│"
 		console.log(row1)
@@ -711,7 +711,7 @@ function printSummaryTable(
 				multiplierStr = multiplierStr.substring(0, versionWidth - 1) + "…"
 			}
 
-			row2 += "│ " + multiplierStr.padEnd(versionWidth) + " "
+			row2 += "│" + multiplierStr.padEnd(versionWidth)
 		}
 		row2 += "│"
 		console.log(row2)
@@ -728,7 +728,7 @@ function printSummaryTable(
 				rankStr = ""
 			}
 
-			row3 += "│ " + rankStr.padEnd(versionWidth) + " "
+			row3 += "│" + rankStr.padEnd(versionWidth)
 		}
 		row3 += "│"
 		console.log(row3)
@@ -737,7 +737,7 @@ function printSummaryTable(
 		if (scenario !== scenarios[scenarios.length - 1]) {
 			let rowSep = "├" + "─".repeat(scenarioWidth + 2)
 			for (let i = 0; i < versions.length; i++) {
-				rowSep += "┼" + "─".repeat(versionWidth + 2)
+				rowSep += "┼" + "─".repeat(versionWidth)
 			}
 			rowSep += "┤"
 			console.log(rowSep)
@@ -747,7 +747,7 @@ function printSummaryTable(
 	// Print footer
 	let footer = "└" + "─".repeat(scenarioWidth + 2)
 	for (let i = 0; i < versions.length; i++) {
-		footer += "┴" + "─".repeat(versionWidth + 2)
+		footer += "┴" + "─".repeat(versionWidth)
 	}
 	footer += "┘"
 	console.log(footer)
