@@ -98,6 +98,14 @@ const removeHigh = index => ({
 		(index % Math.floor(BENCHMARK_CONFIG.arraySize * 0.2))
 })
 
+const sortByIdReverse = () => ({
+	type: "test/sortByIdReverse"
+})
+
+const reverseArray = () => ({
+	type: "test/reverseArray"
+})
+
 const actions = {
 	add,
 	remove,
@@ -106,7 +114,9 @@ const actions = {
 	concat,
 	updateHigh,
 	updateMultiple,
-	removeHigh
+	removeHigh,
+	sortByIdReverse,
+	reverseArray
 }
 
 const immerProducers = {
@@ -245,6 +255,22 @@ const vanillaReducer = (state = createInitialState(), action) => {
 				largeArray: newArray
 			}
 		}
+		case "test/sortByIdReverse": {
+			const newArray = state.largeArray.slice()
+			newArray.sort((a, b) => b.id - a.id) // Sort by ID in reverse order
+			return {
+				...state,
+				largeArray: newArray
+			}
+		}
+		case "test/reverseArray": {
+			const newArray = state.largeArray.slice()
+			newArray.reverse()
+			return {
+				...state,
+				largeArray: newArray
+			}
+		}
 		default:
 			return state
 	}
@@ -308,6 +334,14 @@ const createImmerReducer = produce => {
 					if (indexToRemove !== -1) {
 						draft.largeArray.splice(indexToRemove, 1)
 					}
+					break
+				}
+				case "test/sortByIdReverse": {
+					draft.largeArray.sort((a, b) => b.id - a.id)
+					break
+				}
+				case "test/reverseArray": {
+					draft.largeArray.reverse()
 					break
 				}
 			}
