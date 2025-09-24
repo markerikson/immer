@@ -328,17 +328,16 @@ export function registerChildFinalizationCallback(
 		}
 		// Unmodified draft, return the (frozen) original
 		if (!state.modified_) {
-			// debugLog("State not modified: ", state)
-			// maybeFreeze(rootScope, state.base_, true)
+			debugLog("State not modified: ", state)
 
-			const currentValue = get(parentCopy, key)
+			const currentValue = get(parentCopy, updatedKey)
 			const isMultipleReference =
 				currentValue === state.draft_ && state.base_ !== currentValue
 
 			if (isMultipleReference) {
-				// Multiple reference case - revert to base object
-				set(parentCopy, key, state.base_)
+				set(parentCopy, updatedKey, state.base_)
 			}
+			// }
 
 			return
 		}
@@ -352,7 +351,7 @@ export function registerChildFinalizationCallback(
 			updatedValue = state.copy_
 		} else {
 			// For Maps/Objects, use lookup logic
-			const childCopy = get(parentCopy, key)
+			const childCopy = get(parentCopy, updatedKey)
 			updatedValue = isDraft(childCopy) ? state.copy_ : childCopy
 		}
 
@@ -366,7 +365,7 @@ export function registerChildFinalizationCallback(
 
 		finalizeSetValue(state)
 
-		set(parentCopy, key, updatedValue)
+		set(parentCopy, updatedKey, updatedValue)
 	})
 }
 
