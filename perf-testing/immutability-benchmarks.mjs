@@ -132,17 +132,17 @@ const actions = {
 }
 
 const immerProducers = {
-	immer5: produce5,
-	immer6: produce6,
-	immer7: produce7,
-	immer8: produce8,
-	immer9: produce9,
+	// immer5: produce5,
+	// immer6: produce6,
+	// immer7: produce7,
+	// immer8: produce8,
+	// immer9: produce9,
 	immer10: produce10,
-	immer10Perf: produce10Perf,
-	mutative: produceMutative,
-	mutativeCompat: produceMutativeCompat,
-	structura: produceStructura,
-	limu: produceLimu
+	immer10Perf: produce10Perf
+	// mutative: produceMutative,
+	// mutativeCompat: produceMutativeCompat,
+	// structura: produceStructura,
+	// limu: produceLimu
 }
 
 const noop = () => {}
@@ -375,10 +375,7 @@ const reducers = {
 	...mapValues(immerProducers, createImmerReducer)
 }
 
-const freeze = [
-	// false,
-	true
-]
+const freeze = [false, true]
 
 function createBenchmarks() {
 	// All single-operation benchmarks (fresh state each time)
@@ -608,7 +605,7 @@ function shortenVersionName(versionName) {
 		immer7: "i7",
 		immer8: "i8",
 		immer9: "i9",
-		"mutative-compat": "mutatv-c",
+		mutativeCompat: "mutatv-c",
 		mutative: "mutatv",
 		structura: "struct",
 		vanilla: "vanilla"
@@ -784,6 +781,233 @@ function printSummaryTable(
 	console.log("- 1.00x indicates the fastest version for that scenario")
 }
 
+// Performance improvement analysis between immer10Perf and immer10 (freeze: true)
+function calculateImmer10PerfImprovement(matrix, scenarios) {
+	const baselineKey = "immer10|f+"
+	const improvedKey = "immer10Perf|f+"
+
+	const improvements = []
+
+	for (const scenario of scenarios) {
+		const scenarioData = matrix[scenario] || {}
+		const baselineData = scenarioData[baselineKey]
+		const improvedData = scenarioData[improvedKey]
+
+		if (baselineData && improvedData) {
+			const baselineTime = baselineData.avgTime
+			const improvedTime = improvedData.avgTime
+
+			// Calculate percentage improvement: ((baseline - improved) / baseline) * 100
+			// Positive = improvement, negative = regression
+			const improvement = ((baselineTime - improvedTime) / baselineTime) * 100
+
+			improvements.push({
+				scenario,
+				baselineTime,
+				improvedTime,
+				improvement
+			})
+		}
+	}
+
+	if (improvements.length === 0) {
+		return null
+	}
+
+	const improvementValues = improvements.map(i => i.improvement)
+	const minImprovement = Math.min(...improvementValues)
+	const maxImprovement = Math.max(...improvementValues)
+	const avgImprovement =
+		improvementValues.reduce((sum, val) => sum + val, 0) /
+		improvementValues.length
+
+	return {
+		improvements,
+		stats: {
+			min: minImprovement,
+			max: maxImprovement,
+			avg: avgImprovement,
+			count: improvements.length
+		}
+	}
+}
+
+// Calculate overall version scores using geometric mean of relative performance
+function calculateOverallVersionScores(relativeData, scenarios, versions) {
+	const versionScores = []
+
+	for (const version of versions) {
+		const multipliers = []
+
+		// Collect all relative performance multipliers for this version
+		for (const scenario of scenarios) {
+			const relative = relativeData[scenario]?.[version]
+			if (relative && relative > 0) {
+				multipliers.push(relative)
+			}
+		}
+
+		if (multipliers.length === 0) continue
+
+		// Calculate geometric mean: nth root of product of all values
+		// For performance data, geometric mean is more appropriate than arithmetic mean
+		const product = multipliers.reduce((prod, val) => prod * val, 1)
+		const geometricMean = Math.pow(product, 1 / multipliers.length)
+
+		versionScores.push({
+			version,
+			geometricMean,
+			scenarioCount: multipliers.length
+		})
+	}
+
+	// Sort by geometric mean (lower is better - closer to 1.0x means consistently fast)
+	versionScores.sort((a, b) => a.geometricMean - b.geometricMean)
+
+	// Add rankings
+	versionScores.forEach((score, index) => {
+		score.rank = index + 1
+	})
+
+	return versionScores
+}
+
+function printImmer10PerfComparison(improvementData) {
+	console.log("\n")
+	console.log("=".repeat(80))
+	console.log("IMMER10PERF vs IMMER10 PERFORMANCE COMPARISON (freeze: true)")
+	console.log("=".repeat(80))
+
+	if (!improvementData) {
+		console.log(
+			"No comparable data found between immer10Perf and immer10 (freeze: true)"
+		)
+		return
+	}
+
+	const {stats, improvements} = improvementData
+
+	console.log(`\nSummary Statistics (${stats.count} scenarios):`)
+	console.log(
+		`  Average Improvement: ${stats.avg >= 0 ? "+" : ""}${stats.avg.toFixed(
+			1
+		)}%`
+	)
+	console.log(
+		`  Best Improvement:    ${stats.max >= 0 ? "+" : ""}${stats.max.toFixed(
+			1
+		)}%`
+	)
+	console.log(
+		`  Worst Improvement:   ${stats.min >= 0 ? "+" : ""}${stats.min.toFixed(
+			1
+		)}%`
+	)
+
+	// Show per-scenario breakdown
+	console.log("\nPer-Scenario Breakdown:")
+	console.log(
+		"┌─────────────────────┬──────────────┬──────────────┬─────────────┐"
+	)
+	console.log(
+		"│ Scenario            │ immer10      │ immer10Perf  │ Improvement │"
+	)
+	console.log(
+		"├─────────────────────┼──────────────┼──────────────┼─────────────┤"
+	)
+
+	// Sort by improvement (best first)
+	const sortedImprovements = [...improvements].sort(
+		(a, b) => b.improvement - a.improvement
+	)
+
+	for (const item of sortedImprovements) {
+		const scenario = item.scenario.padEnd(19).substring(0, 19)
+		const baseline = formatTime(item.baselineTime).padStart(12)
+		const improved = formatTime(item.improvedTime).padStart(12)
+		const improvement = `${
+			item.improvement >= 0 ? "+" : ""
+		}${item.improvement.toFixed(1)}%`.padStart(11)
+
+		console.log(`│ ${scenario} │ ${baseline} │ ${improved} │ ${improvement} │`)
+	}
+
+	console.log(
+		"└─────────────────────┴──────────────┴──────────────┴─────────────┘"
+	)
+
+	// Interpretation
+	if (stats.avg > 0) {
+		console.log(
+			`\n✓ immer10Perf shows an average ${stats.avg.toFixed(
+				1
+			)}% performance improvement over immer10`
+		)
+	} else {
+		console.log(
+			`\n⚠ immer10Perf shows an average ${Math.abs(stats.avg).toFixed(
+				1
+			)}% performance regression vs immer10`
+		)
+	}
+}
+
+function printOverallVersionRankings(versionScores) {
+	console.log("\n")
+	console.log("=".repeat(80))
+	console.log(
+		"OVERALL VERSION RANKINGS (Geometric Mean of Relative Performance)"
+	)
+	console.log("=".repeat(80))
+
+	if (versionScores.length === 0) {
+		console.log("No version data available for overall rankings.")
+		return
+	}
+
+	console.log(
+		"\nMethodology: Lower geometric mean = better overall performance"
+	)
+	console.log(
+		"(Geometric mean is standard for benchmarking as it handles multiplicative performance differences)"
+	)
+
+	console.log("\n┌──────┬─────────────────────┬─────────────────┬───────────┐")
+	console.log("│ Rank │ Version             │ Geometric Mean  │ Scenarios │")
+	console.log("├──────┼─────────────────────┼─────────────────┼───────────┤")
+
+	for (const score of versionScores) {
+		const [versionName, freezeIndicator] = score.version.split("|")
+		const shortName = shortenVersionName(versionName)
+		const displayName = `${shortName} (${freezeIndicator})`
+			.padEnd(19)
+			.substring(0, 19)
+		const rank = score.rank.toString().padStart(4)
+		const geoMean = `${score.geometricMean.toFixed(2)}x`.padStart(15)
+		const scenarios = score.scenarioCount.toString().padStart(9)
+
+		console.log(`│ ${rank} │ ${displayName} │ ${geoMean} │ ${scenarios} │`)
+	}
+
+	console.log("└──────┴─────────────────────┴─────────────────┴───────────┘")
+
+	// Highlight top performers
+	if (versionScores.length >= 3) {
+		console.log("\nTop Overall Performers:")
+		for (let i = 0; i < Math.min(10, versionScores.length); i++) {
+			const score = versionScores[i]
+			const [versionName, freezeIndicator] = score.version.split("|")
+			const shortName = shortenVersionName(versionName)
+			console.log(
+				`  ${i +
+					1}. ${shortName} (${freezeIndicator}) - ${score.geometricMean.toFixed(
+					2
+				)}x average`
+			)
+		}
+	}
+}
+
 function printBenchmarkSummaryTable(benchmarks) {
 	try {
 		const data = extractBenchmarkData(benchmarks)
@@ -799,7 +1023,20 @@ function printBenchmarkSummaryTable(benchmarks) {
 			versions
 		)
 
+		// Print main summary table
 		printSummaryTable(matrix, scenarios, versions, relativeData, rankings)
+
+		// Print immer10Perf vs immer10 comparison
+		const improvementData = calculateImmer10PerfImprovement(matrix, scenarios)
+		printImmer10PerfComparison(improvementData)
+
+		// Print overall version rankings
+		const versionScores = calculateOverallVersionScores(
+			relativeData,
+			scenarios,
+			versions
+		)
+		printOverallVersionRankings(versionScores)
 	} catch (error) {
 		console.error("\nError generating summary table:", error.message)
 	}
