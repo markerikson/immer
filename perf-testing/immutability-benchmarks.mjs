@@ -458,9 +458,336 @@ function createBenchmarks() {
 	})
 }
 
+// Summary table functionality
+function extractBenchmarkData(benchmarks) {
+	const data = []
+
+	for (const trial of benchmarks) {
+		for (const run of trial.runs) {
+			if (run.error || !run.stats) continue
+
+			// Parse benchmark name to extract scenario, version, and freeze setting
+			// Expected format: "scenario: version (freeze: true/false)"
+			const match = run.name.match(
+				/^(.+?):\s*(.+?)\s*\(freeze:\s*(true|false)\)$/
+			)
+			if (!match) continue
+
+			const [, scenario, version, freeze] = match
+			const freezeIndicator = freeze === "true" ? "f+" : "f-"
+			const versionKey = `${version.trim()}|${freezeIndicator}`
+
+			data.push({
+				scenario: scenario.trim(),
+				version: version.trim(),
+				freeze: freeze === "true",
+				freezeIndicator,
+				versionKey,
+				avgTime: run.stats.avg,
+				stats: run.stats
+			})
+		}
+	}
+
+	return data
+}
+
+function organizeBenchmarkMatrix(data) {
+	const matrix = {}
+	const scenarios = new Set()
+	const versions = new Set()
+
+	// Organize data into matrix structure
+	for (const item of data) {
+		scenarios.add(item.scenario)
+		versions.add(item.versionKey)
+
+		if (!matrix[item.scenario]) {
+			matrix[item.scenario] = {}
+		}
+
+		matrix[item.scenario][item.versionKey] = {
+			avgTime: item.avgTime,
+			stats: item.stats
+		}
+	}
+
+	return {
+		matrix,
+		scenarios: Array.from(scenarios).sort(),
+		versions: Array.from(versions).sort()
+	}
+}
+
+function calculateRelativePerformanceAndRankings(matrix, scenarios, versions) {
+	const relativeData = {}
+	const rankings = {}
+
+	for (const scenario of scenarios) {
+		const scenarioData = matrix[scenario] || {}
+		const validVersions = versions.filter(v => scenarioData[v])
+
+		if (validVersions.length === 0) continue
+
+		// Find fastest time for this scenario
+		const times = validVersions.map(v => ({
+			version: v,
+			time: scenarioData[v].avgTime
+		}))
+
+		times.sort((a, b) => a.time - b.time)
+		const fastestTime = times[0].time
+
+		// Calculate relative performance and rankings
+		relativeData[scenario] = {}
+		rankings[scenario] = {}
+
+		times.forEach((item, index) => {
+			const multiplier = item.time / fastestTime
+			relativeData[scenario][item.version] = multiplier
+			rankings[scenario][item.version] = index + 1
+		})
+	}
+
+	return {relativeData, rankings}
+}
+
+function formatTime(nanoseconds) {
+	// Use similar formatting to Mitata's $.time function, but more compact
+	if (nanoseconds < 1) return `${(nanoseconds * 1e3).toFixed(1)}ps`
+	if (nanoseconds < 1e3) return `${nanoseconds.toFixed(1)}ns`
+
+	let ns = nanoseconds / 1000
+	if (ns < 1e3) return `${ns.toFixed(1)}µs`
+
+	ns /= 1000
+	if (ns < 1e3) return `${ns.toFixed(1)}ms`
+
+	ns /= 1000
+	if (ns < 1e3) return `${ns.toFixed(1)}s`
+
+	return `${ns.toFixed(1)}s`
+}
+
+function formatRanking(rank) {
+	const suffixes = ["th", "st", "nd", "rd"]
+	const suffix = rank >= 11 && rank <= 13 ? "th" : suffixes[rank % 10] || "th"
+	return `${rank}${suffix}`
+}
+
+function formatMultiplier(relative) {
+	if (relative === 1) return "1.0x"
+
+	// If the multiplier is 4+ digits (1000+), don't show decimals
+	if (relative >= 1000) {
+		return `${Math.round(relative)}x`
+	}
+
+	return `${relative.toFixed(1)}x`
+}
+
+function shortenVersionName(versionName) {
+	// Special case common long version names to save space
+	const shortNames = {
+		immer10Perf: "i10Perf",
+		immer10: "i10",
+		immer5: "i5",
+		immer6: "i6",
+		immer7: "i7",
+		immer8: "i8",
+		immer9: "i9",
+		"mutative-compat": "mutatv-c",
+		mutative: "mutatv",
+		structura: "struct",
+		vanilla: "vanilla"
+	}
+
+	return shortNames[versionName] || versionName
+}
+
+function printSummaryTable(
+	matrix,
+	scenarios,
+	versions,
+	relativeData,
+	rankings
+) {
+	console.log("\n")
+	console.log("=".repeat(80))
+	console.log("BENCHMARK SUMMARY TABLE")
+	console.log("=".repeat(80))
+
+	if (scenarios.length === 0 || versions.length === 0) {
+		console.log("No benchmark data available for summary table.")
+		return
+	}
+
+	// Parse version keys to get version names and freeze indicators
+	const versionInfo = versions.map(v => {
+		const [versionName, freezeIndicator] = v.split("|")
+		const shortName = shortenVersionName(versionName)
+		return {
+			key: v,
+			name: shortName,
+			freeze: freezeIndicator,
+			originalName: versionName
+		}
+	})
+
+	// Fixed column widths for consistent alignment - 9 chars content + separators
+	const scenarioWidth = 9
+	const versionWidth = 9
+
+	// Print header with 9-char content + padding
+	let header = "┌" + "─".repeat(scenarioWidth + 2)
+	for (let i = 0; i < versions.length; i++) {
+		header += "┬" + "─".repeat(versionWidth + 2)
+	}
+	header += "┐"
+	console.log(header)
+
+	// Print column headers - version names
+	let headerRow1 = "│ " + "Scenario".padEnd(scenarioWidth) + " "
+	for (const vInfo of versionInfo) {
+		headerRow1 += "│ " + vInfo.name.padEnd(versionWidth) + " "
+	}
+	headerRow1 += "│"
+	console.log(headerRow1)
+
+	// Print column headers - freeze indicators
+	let headerRow2 = "│ " + "".padEnd(scenarioWidth) + " "
+	for (const vInfo of versionInfo) {
+		headerRow2 += "│ " + vInfo.freeze.padEnd(versionWidth) + " "
+	}
+	headerRow2 += "│"
+	console.log(headerRow2)
+
+	// Print separator
+	let separator = "├" + "─".repeat(scenarioWidth + 2)
+	for (let i = 0; i < versions.length; i++) {
+		separator += "┼" + "─".repeat(versionWidth + 2)
+	}
+	separator += "┤"
+	console.log(separator)
+
+	// Print data rows (now 3 lines per scenario) - tighter spacing
+	for (const scenario of scenarios) {
+		const scenarioData = matrix[scenario] || {}
+
+		// Truncate scenario name if too long, allowing for wrapping
+		const displayScenario =
+			scenario.length > scenarioWidth
+				? scenario.substring(0, scenarioWidth - 2) + ".."
+				: scenario
+
+		// First line: scenario name and absolute times
+		let row1 = "│ " + displayScenario.padEnd(scenarioWidth) + " "
+		for (const version of versions) {
+			const data = scenarioData[version]
+			let timeStr = data ? formatTime(data.avgTime) : "N/A"
+			// Truncate if too long
+			if (timeStr.length > versionWidth) {
+				timeStr = timeStr.substring(0, versionWidth - 1) + "…"
+			}
+			row1 += "│ " + timeStr.padEnd(versionWidth) + " "
+		}
+		row1 += "│"
+		console.log(row1)
+
+		// Second line: relative performance multipliers
+		let row2 = "│ " + "".padEnd(scenarioWidth) + " "
+		for (const version of versions) {
+			const relative = relativeData[scenario]?.[version]
+
+			let multiplierStr = ""
+			if (relative) {
+				multiplierStr = formatMultiplier(relative)
+			} else {
+				multiplierStr = "N/A"
+			}
+
+			// Truncate if too long
+			if (multiplierStr.length > versionWidth) {
+				multiplierStr = multiplierStr.substring(0, versionWidth - 1) + "…"
+			}
+
+			row2 += "│ " + multiplierStr.padEnd(versionWidth) + " "
+		}
+		row2 += "│"
+		console.log(row2)
+
+		// Third line: rankings
+		let row3 = "│ " + "".padEnd(scenarioWidth) + " "
+		for (const version of versions) {
+			const ranking = rankings[scenario]?.[version]
+
+			let rankStr = ""
+			if (ranking) {
+				rankStr = `(${formatRanking(ranking)})`
+			} else {
+				rankStr = ""
+			}
+
+			row3 += "│ " + rankStr.padEnd(versionWidth) + " "
+		}
+		row3 += "│"
+		console.log(row3)
+
+		// Add separator between scenarios (except for last one)
+		if (scenario !== scenarios[scenarios.length - 1]) {
+			let rowSep = "├" + "─".repeat(scenarioWidth + 2)
+			for (let i = 0; i < versions.length; i++) {
+				rowSep += "┼" + "─".repeat(versionWidth + 2)
+			}
+			rowSep += "┤"
+			console.log(rowSep)
+		}
+	}
+
+	// Print footer
+	let footer = "└" + "─".repeat(scenarioWidth + 2)
+	for (let i = 0; i < versions.length; i++) {
+		footer += "┴" + "─".repeat(versionWidth + 2)
+	}
+	footer += "┘"
+	console.log(footer)
+
+	console.log("\nNotes:")
+	console.log("- f+ = freeze enabled, f- = freeze disabled")
+	console.log("- Line 1: absolute execution time")
+	console.log("- Line 2: relative performance multiplier")
+	console.log("- Line 3: ranking (1st = fastest, 2nd = second fastest, etc.)")
+	console.log("- 1.00x indicates the fastest version for that scenario")
+}
+
+function printBenchmarkSummaryTable(benchmarks) {
+	try {
+		const data = extractBenchmarkData(benchmarks)
+		if (data.length === 0) {
+			console.log("\nNo valid benchmark data found for summary table.")
+			return
+		}
+
+		const {matrix, scenarios, versions} = organizeBenchmarkMatrix(data)
+		const {relativeData, rankings} = calculateRelativePerformanceAndRankings(
+			matrix,
+			scenarios,
+			versions
+		)
+
+		printSummaryTable(matrix, scenarios, versions, relativeData, rankings)
+	} catch (error) {
+		console.error("\nError generating summary table:", error.message)
+	}
+}
+
 async function main() {
 	createBenchmarks()
-	await run()
+	const results = await run()
+
+	// Generate and print summary table
+	printBenchmarkSummaryTable(results.benchmarks)
+
 	process.exit(0)
 }
 
