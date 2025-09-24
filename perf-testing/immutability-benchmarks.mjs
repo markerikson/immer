@@ -112,11 +112,12 @@ const actions = {
 	filter,
 	update,
 	concat,
-	updateHigh,
-	updateMultiple,
-	removeHigh,
-	sortByIdReverse,
-	reverseArray
+	// dash-named fields to improve readability in benchmark results
+	"update-high": updateHigh,
+	"update-multiple": updateMultiple,
+	"remove-high": removeHigh,
+	"sortById-reverse": sortByIdReverse,
+	"reverse-array": reverseArray
 }
 
 const immerProducers = {
@@ -398,7 +399,7 @@ function createBenchmarks() {
 	}
 
 	// State reuse benchmarks (tests performance on frozen/evolved state)
-	const reuseActions = ["update", "updateHigh", "remove", "removeHigh"]
+	const reuseActions = ["update", "update-high", "remove", "remove-high"]
 	for (const action of reuseActions) {
 		summary(function() {
 			bench(`$action-reuse: $version (freeze: $freeze)`, function*(args) {
@@ -443,8 +444,8 @@ function createBenchmarks() {
 				// Perform a sequence of different operations (typical workflow)
 				state = reducers[version](state, actions.add(1))
 				state = reducers[version](state, actions.update(500))
-				state = reducers[version](state, actions.updateHigh(2))
-				state = reducers[version](state, actions.updateMultiple(3))
+				state = reducers[version](state, actions["update-high"](2))
+				state = reducers[version](state, actions["update-multiple"](3))
 				state = reducers[version](state, actions.remove(100))
 
 				setAutoFreezes[version](false)
@@ -605,6 +606,22 @@ function shortenVersionName(versionName) {
 	return shortNames[versionName] || versionName
 }
 
+function formatScenarioName(scenario, maxWidth) {
+	// If the scenario contains hyphens and is too long, split on hyphens
+	// and display on multiple lines within the cell
+	if (scenario.includes("-") && scenario.length > maxWidth) {
+		const parts = scenario.split("-")
+		return parts
+	}
+
+	// For non-hyphenated scenarios, truncate if needed
+	if (scenario.length > maxWidth) {
+		return [scenario.substring(0, maxWidth - 2) + ".."]
+	}
+
+	return [scenario]
+}
+
 function printSummaryTable(
 	matrix,
 	scenarios,
@@ -670,68 +687,64 @@ function printSummaryTable(
 	separator += "┤"
 	console.log(separator)
 
-	// Print data rows (now 3 lines per scenario) - tighter spacing
+	// Print data rows (now 3+ lines per scenario depending on scenario name length)
 	for (const scenario of scenarios) {
 		const scenarioData = matrix[scenario] || {}
 
-		// Truncate scenario name if too long, allowing for wrapping
-		const displayScenario =
-			scenario.length > scenarioWidth
-				? scenario.substring(0, scenarioWidth - 2) + ".."
-				: scenario
+		// Format scenario name, potentially splitting on hyphens
+		const scenarioParts = formatScenarioName(scenario, scenarioWidth)
+		const maxLines = Math.max(3, scenarioParts.length) // At least 3 lines for data
 
-		// First line: scenario name and absolute times
-		let row1 = "│ " + displayScenario.padEnd(scenarioWidth) + " "
-		for (const version of versions) {
-			const data = scenarioData[version]
-			let timeStr = data ? formatTime(data.avgTime) : "N/A"
-			// Truncate if too long
-			if (timeStr.length > versionWidth) {
-				timeStr = timeStr.substring(0, versionWidth - 1) + "…"
-			}
-			row1 += "│" + timeStr.padEnd(versionWidth)
-		}
-		row1 += "│"
-		console.log(row1)
+		// Print all lines for this scenario
+		for (let lineIndex = 0; lineIndex < maxLines; lineIndex++) {
+			let row = "│ "
 
-		// Second line: relative performance multipliers
-		let row2 = "│ " + "".padEnd(scenarioWidth) + " "
-		for (const version of versions) {
-			const relative = relativeData[scenario]?.[version]
-
-			let multiplierStr = ""
-			if (relative) {
-				multiplierStr = formatMultiplier(relative)
+			// Scenario column content
+			if (lineIndex < scenarioParts.length) {
+				row += scenarioParts[lineIndex].padEnd(scenarioWidth)
 			} else {
-				multiplierStr = "N/A"
+				row += "".padEnd(scenarioWidth)
+			}
+			row += " "
+
+			// Version columns content
+			for (const version of versions) {
+				let cellContent = ""
+
+				if (lineIndex === 0) {
+					// First line: absolute times
+					const data = scenarioData[version]
+					let timeStr = data ? formatTime(data.avgTime) : "N/A"
+					if (timeStr.length > versionWidth) {
+						timeStr = timeStr.substring(0, versionWidth - 1) + "…"
+					}
+					cellContent = timeStr
+				} else if (lineIndex === 1) {
+					// Second line: relative performance multipliers
+					const relative = relativeData[scenario]?.[version]
+					if (relative) {
+						cellContent = formatMultiplier(relative)
+					} else {
+						cellContent = "N/A"
+					}
+					if (cellContent.length > versionWidth) {
+						cellContent = cellContent.substring(0, versionWidth - 1) + "…"
+					}
+				} else if (lineIndex === 2) {
+					// Third line: rankings
+					const ranking = rankings[scenario]?.[version]
+					if (ranking) {
+						cellContent = `(${formatRanking(ranking)})`
+					}
+				}
+				// Lines beyond 2 are empty for version columns
+
+				row += "│" + cellContent.padEnd(versionWidth)
 			}
 
-			// Truncate if too long
-			if (multiplierStr.length > versionWidth) {
-				multiplierStr = multiplierStr.substring(0, versionWidth - 1) + "…"
-			}
-
-			row2 += "│" + multiplierStr.padEnd(versionWidth)
+			row += "│"
+			console.log(row)
 		}
-		row2 += "│"
-		console.log(row2)
-
-		// Third line: rankings
-		let row3 = "│ " + "".padEnd(scenarioWidth) + " "
-		for (const version of versions) {
-			const ranking = rankings[scenario]?.[version]
-
-			let rankStr = ""
-			if (ranking) {
-				rankStr = `(${formatRanking(ranking)})`
-			} else {
-				rankStr = ""
-			}
-
-			row3 += "│" + rankStr.padEnd(versionWidth)
-		}
-		row3 += "│"
-		console.log(row3)
 
 		// Add separator between scenarios (except for last one)
 		if (scenario !== scenarios[scenarios.length - 1]) {
