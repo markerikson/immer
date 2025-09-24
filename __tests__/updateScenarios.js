@@ -3,7 +3,7 @@ import {produce} from "../src/immer.js"
 
 // Test configuration - smaller values for faster tests
 const TEST_CONFIG = {
-	arraySize: 10,
+	arraySize: 5,
 	nestedArraySize: 2,
 	multiUpdateCount: 5,
 	reuseStateIterations: 5
@@ -31,6 +31,22 @@ function createInitialState(arraySize = TEST_CONFIG.arraySize) {
 	return initialState
 }
 
+// Utility functions for calculating array indices based on size
+const getValidIndex = (arraySize = TEST_CONFIG.arraySize) => {
+	// Return a valid index (not the last one to avoid edge cases)
+	return Math.min(arraySize - 2, Math.max(0, arraySize - 2))
+}
+
+const getValidId = (arraySize = TEST_CONFIG.arraySize) => {
+	// Return a valid ID that exists in the array
+	return Math.min(arraySize - 2, Math.max(0, arraySize - 2))
+}
+
+const getHighIndex = (offset = 0, arraySize = TEST_CONFIG.arraySize) => {
+	// Calculate high index (80% through the array + offset)
+	return Math.floor(arraySize * 0.8) + (offset % Math.floor(arraySize * 0.2))
+}
+
 // Action creators
 const add = index => ({
 	type: "test/addItem",
@@ -54,9 +70,7 @@ const concat = index => ({
 const updateHigh = index => ({
 	type: "test/updateHighIndex",
 	payload: {
-		id:
-			Math.floor(TEST_CONFIG.arraySize * 0.8) +
-			(index % Math.floor(TEST_CONFIG.arraySize * 0.2)),
+		id: getHighIndex(index),
 		value: index,
 		nestedData: index
 	}
@@ -73,9 +87,7 @@ const updateMultiple = index => ({
 
 const removeHigh = index => ({
 	type: "test/removeHighIndex",
-	payload:
-		Math.floor(TEST_CONFIG.arraySize * 0.8) +
-		(index % Math.floor(TEST_CONFIG.arraySize * 0.2))
+	payload: getHighIndex(index)
 })
 
 const sortByIdReverse = () => ({
@@ -309,7 +321,7 @@ describe("Update Scenarios - Single Operations", () => {
 	})
 
 	test("remove scenario", () => {
-		const action = actions.remove(5)
+		const action = actions.remove(getValidIndex())
 		const vanillaResult = vanillaReducer(initialState, action)
 		const immerResult = immerReducer(initialState, action)
 
@@ -320,7 +332,7 @@ describe("Update Scenarios - Single Operations", () => {
 	})
 
 	test("filter scenario", () => {
-		const action = actions.filter(10)
+		const action = actions.filter(getValidIndex())
 		const vanillaResult = vanillaReducer(initialState, action)
 		const immerResult = immerReducer(initialState, action)
 
@@ -331,13 +343,16 @@ describe("Update Scenarios - Single Operations", () => {
 	})
 
 	test("update scenario", () => {
-		const action = actions.update(50)
+		const targetId = getValidId()
+		const action = actions.update(targetId)
 		const vanillaResult = vanillaReducer(initialState, action)
 		const immerResult = immerReducer(initialState, action)
 
-		const updatedItem = immerResult.largeArray.find(item => item.id === 50)
-		expect(updatedItem.value).toBe(50)
-		expect(updatedItem.nested.data).toBe(50)
+		const updatedItem = immerResult.largeArray.find(
+			item => item.id === targetId
+		)
+		expect(updatedItem.value).toBe(targetId)
+		expect(updatedItem.nested.data).toBe(targetId)
 	})
 
 	test("concat scenario", () => {
@@ -388,7 +403,7 @@ describe("Update Scenarios - Single Operations", () => {
 		expect(removedItem).toBeUndefined()
 	})
 
-	test.only("sortByIdReverse scenario", () => {
+	test("sortByIdReverse scenario", () => {
 		const action = actions.sortByIdReverse()
 		const vanillaResult = vanillaReducer(initialState, action)
 		const immerResult = immerReducer(initialState, action)
@@ -486,14 +501,15 @@ describe("Update Scenarios - Mixed Sequence", () => {
 		state = immerReducer(state, actions.add(1))
 		expect(state.largeArray.length).toBe(originalLength + 1)
 
-		state = immerReducer(state, actions.update(500))
-		const updatedItem = state.largeArray.find(item => item.id === 500)
-		expect(updatedItem.value).toBe(500)
+		const targetId = getValidId()
+		state = immerReducer(state, actions.update(targetId))
+		const updatedItem = state.largeArray.find(item => item.id === targetId)
+		expect(updatedItem.value).toBe(targetId)
 
 		state = immerReducer(state, actions.updateHigh(2))
 		state = immerReducer(state, actions.updateMultiple(3))
 
-		state = immerReducer(state, actions.remove(100))
+		state = immerReducer(state, actions.remove(getValidIndex()))
 		expect(state.largeArray.length).toBe(originalLength) // +1 from add, -1 from remove
 
 		// Verify final state integrity

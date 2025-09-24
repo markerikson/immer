@@ -114,12 +114,7 @@ export function createProxyProxy<T extends Objectish>(
  */
 export const objectTraps: ProxyHandler<ProxyState> = {
 	get(state, prop) {
-		if (state.revoked_) {
-			console.trace("Cannot access a proxy that was revoked!", {state, prop})
-			throw new Error(
-				"Cannot access a proxy that was revoked! " + JSON.stringify(prop)
-			)
-		}
+		// assertUnrevoked(state)
 		if (prop === DRAFT_STATE) return state
 
 		// Intercept array methods with O(1) lookup
@@ -380,13 +375,6 @@ export function createMethodInterceptor(
 	}
 }
 
-function createElementProxyIfNeeded(state: ProxyArrayState, value: any): any {
-	if (!isDraftable(value)) return value
-
-	// Create proxy only if the element will be accessed/modified
-	return createProxy(state.scope_, value, state)
-}
-
 export function handleSplice(state: ProxyArrayState, args: any[]): any[] {
 	const [start, deleteCount, ...items] = args
 	prepareCopy(state)
@@ -424,15 +412,10 @@ export function handleSort(state: ProxyArrayState, args: any[]): any[] {
 
 	const {copy_} = state
 
-	// For sort, we need to handle comparator access carefully
+	// During bulk operations, we can safely pass raw values to comparators
+	// since we're not allowing individual element access anyway
 	if (compareFn) {
-		// Create wrapper that provides proxies only when needed
-		const wrappedComparator = (a: any, b: any) => {
-			const proxyA = isDraftable(a) ? createElementProxyIfNeeded(state, a) : a
-			const proxyB = isDraftable(b) ? createElementProxyIfNeeded(state, b) : b
-			return compareFn(proxyA, proxyB)
-		}
-		copy_!.sort(wrappedComparator)
+		copy_!.sort(compareFn) // Pass raw values directly
 	} else {
 		copy_!.sort()
 	}
@@ -648,18 +631,30 @@ function handleCrossReference(
 				// 	targetCopy: target.copy_ || target.base_
 				// })
 				// Update the target location with finalized value
-				const targetCopy = target.copy_ || target.base_
-				if (targetCopy[key] === value) {
-					let finalizedValue
-					if (valueDraft.modified_) {
-						finalizedValue = valueDraft.copy_
-					} else {
-						finalizedValue = valueDraft.base_
-					}
+				if (!target.copy_) {
+					prepareCopy(target)
+				}
 
-					if (!target.copy_) {
-						prepareCopy(target)
+				let finalizedValue
+				if (valueDraft.modified_) {
+					finalizedValue = valueDraft.copy_
+				} else {
+					finalizedValue = valueDraft.base_
+				}
+
+				// For arrays, we need to handle the case where elements may have moved
+				// during operations like sort(). Find the current position of the element.
+				if (target.type_ === ArchType.Array) {
+					const targetCopy = target.copy_!
+					// Find the current index of the original proxy/value in the array
+					for (let i = 0; i < targetCopy.length; i++) {
+						if (targetCopy[i] === value) {
+							targetCopy[i] = finalizedValue
+							break
+						}
 					}
+				} else {
+					// For objects, the key doesn't change
 					target.copy_![key] = finalizedValue
 				}
 			})

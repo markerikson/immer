@@ -279,9 +279,33 @@ export function registerChildFinalizationCallback(
 ) {
 	parent.callbacks_.push(function childCleanup() {
 		const parentCopy = parent.copy_ || parent.base_
-		const childCopy = get(parentCopy, key)
 		const state: ImmerState = child
-		// debugLog("Finalize callback", {key, parent, child, childCopy})
+
+		let updatedKey = key
+
+		if (
+			parent.type_ === ArchType.Array &&
+			typeof key === "string" &&
+			/^\d+$/.test(key)
+		) {
+			const array = parentCopy as any[]
+			const currentIndex = array.findIndex(item => item === state.draft_)
+
+			debugLog("Updating array child: ", {
+				key,
+				parentCopy,
+				currentIndex
+			})
+
+			if (currentIndex !== -1) {
+				// Update at the current position, not the original key
+				updatedKey = currentIndex
+			}
+		}
+
+		const childCopy = get(parentCopy, updatedKey)
+
+		debugLog("Finalize callback", {key, parent, child, childCopy})
 
 		if (!state) {
 			// debugLog(

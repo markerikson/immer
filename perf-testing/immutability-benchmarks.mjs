@@ -58,6 +58,17 @@ const BENCHMARK_CONFIG = {
 	reuseStateIterations: 10
 }
 
+// Utility functions for calculating array indices based on size
+const getValidIndex = (arraySize = BENCHMARK_CONFIG.arraySize) => {
+	// Return a valid index (not the last one to avoid edge cases)
+	return Math.min(arraySize - 2, Math.max(0, arraySize - 2))
+}
+
+const getValidId = (arraySize = BENCHMARK_CONFIG.arraySize) => {
+	// Return a valid ID that exists in the array
+	return Math.min(arraySize - 2, Math.max(0, arraySize - 2))
+}
+
 const add = index => ({
 	type: "test/addItem",
 	payload: {id: index, value: index, nested: {data: index}}
@@ -443,10 +454,10 @@ function createBenchmarks() {
 
 				// Perform a sequence of different operations (typical workflow)
 				state = reducers[version](state, actions.add(1))
-				state = reducers[version](state, actions.update(500))
+				state = reducers[version](state, actions.update(getValidId()))
 				state = reducers[version](state, actions["update-high"](2))
 				state = reducers[version](state, actions["update-multiple"](3))
-				state = reducers[version](state, actions.remove(100))
+				state = reducers[version](state, actions.remove(getValidIndex()))
 
 				setAutoFreezes[version](false)
 			}
