@@ -17,7 +17,8 @@ import {
 	revokeScope,
 	isFrozen,
 	isMap,
-	get
+	get,
+	archTypeToString
 } from "../internal"
 import {debugLog} from "../internal"
 import util from "util"
@@ -271,6 +272,8 @@ function maybeFreeze(scope: ImmerScope, value: any, deep = false) {
 	}
 }
 
+const reNumericIndex = /^\d+$/
+
 export function registerChildFinalizationCallback(
 	rootScope: ImmerScope,
 	parent: ImmerState,
@@ -281,12 +284,46 @@ export function registerChildFinalizationCallback(
 		const parentCopy = parent.copy_ || parent.base_
 		const state: ImmerState = child
 
+		debugLog("Child finalization callback", {
+			key,
+			hasState: !!state,
+			modified: state?.modified_,
+			finalized: state?.finalized_,
+			parentType: archTypeToString(parent.type_),
+			childType: archTypeToString(state?.type_)
+		})
+
+		if (!state) {
+			// debugLog(
+			// 	"No state found for child, skipping finalization callback.",
+			// 	key,
+			// 	child
+			// )
+			return
+		}
+
+		if (state.finalized_) {
+			debugLog("Child already finalized, skipping finalization callback.", key)
+			return
+		}
+
+		// Never finalize drafts owned by another scope.
+		if (state.scope_ !== rootScope) {
+			// debugLog(
+			// 	"Skipping finalization of foreign draft",
+			// 	key,
+			// 	state.scope_,
+			// 	rootScope
+			// )
+			return
+		}
+
 		let updatedKey = key
 
 		if (
 			parent.type_ === ArchType.Array &&
 			typeof key === "string" &&
-			/^\d+$/.test(key)
+			reNumericIndex.test(key)
 		) {
 			const array = parentCopy as any[]
 
@@ -312,25 +349,6 @@ export function registerChildFinalizationCallback(
 
 		debugLog("Finalize callback", {key, parent, child, childCopy})
 
-		if (!state) {
-			// debugLog(
-			// 	"No state found for child, skipping finalization callback.",
-			// 	key,
-			// 	child
-			// )
-			return
-		}
-
-		// Never finalize drafts owned by another scope.
-		if (state.scope_ !== rootScope) {
-			// debugLog(
-			// 	"Skipping finalization of foreign draft",
-			// 	key,
-			// 	state.scope_,
-			// 	rootScope
-			// )
-			return
-		}
 		// Unmodified draft, return the (frozen) original
 		if (!state.modified_) {
 			debugLog("State not modified: ", state)
@@ -442,6 +460,9 @@ export function handleValue(
 				// })
 
 				set(target, key, updatedValue)
+
+				valueDraft.finalized_ = true
+				valueDraft.scope_.unfinalizedDrafts_--
 			}
 		} else if (isDraftable(value)) {
 			// Recursively handle nested values

@@ -223,7 +223,7 @@ export class Immer implements ProducersFns {
 	}
 }
 
-function archTypeToString(value: ArchType) {
+export function archTypeToString(value: ArchType) {
 	switch (value) {
 		case ArchType.Object:
 			return "Object"

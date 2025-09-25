@@ -680,12 +680,11 @@ export function finalizeAssigned(
 	rootScope: ImmerScope
 ) {
 	const copy = state.copy_
-	// debugLog("finalizeAssigned", {key, copy, state})
-	if (
-		rootScope.drafts_.length > 1 &&
-		has((state as Exclude<ImmerState, SetState>).assigned_!, key) &&
-		state.copy_
-	) {
+	const wasAssigned: boolean =
+		get((state as Exclude<ImmerState, SetState>).assigned_!, key) ?? false
+	debugLog("finalizeAssigned", {key, copy, state, wasAssigned})
+
+	if (rootScope.drafts_.length > 1 && wasAssigned === true && state.copy_) {
 		handleValue(get(state.copy_, key), rootScope.handledSet_, rootScope)
 	}
 }
