@@ -289,18 +289,23 @@ export function registerChildFinalizationCallback(
 			/^\d+$/.test(key)
 		) {
 			const array = parentCopy as any[]
-			const currentIndex = array.findIndex(item => item === state.draft_)
 
-			debugLog("Updating array child: ", {
-				key,
-				parentCopy,
-				currentIndex
-			})
+			const originalIndex = parseInt(key)
 
-			if (currentIndex !== -1) {
-				// Update at the current position, not the original key
-				updatedKey = currentIndex
+			if (array[originalIndex] === state.draft_) {
+				// Fast path: still at original position
+				updatedKey = originalIndex
+			} else {
+				// Slow path: only search when position has changed
+				const currentIndex = array.findIndex(item => item === state.draft_)
+				updatedKey = currentIndex !== -1 ? currentIndex : originalIndex
 			}
+
+			// debugLog("Updating array child: ", {
+			// 	key,
+			// 	parentCopy,
+			// 	currentIndex
+			// })
 		}
 
 		const childCopy = get(parentCopy, updatedKey)
