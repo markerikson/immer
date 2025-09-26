@@ -21,6 +21,7 @@ export interface ImmerScope {
 	immer_: Immer
 	unfinalizedDrafts_: number
 	handledSet_: WeakSet<any>
+	processedForPatches: WeakSet<any>
 }
 
 let currentScope: ImmerScope | undefined
@@ -41,7 +42,8 @@ function createScope(
 		// need to prevent auto-freezing so the unowned draft can be finalized.
 		canAutoFreeze_: true,
 		unfinalizedDrafts_: 0,
-		handledSet_: new WeakSet()
+		handledSet_: new WeakSet(),
+		processedForPatches: new WeakSet()
 	}
 }
 

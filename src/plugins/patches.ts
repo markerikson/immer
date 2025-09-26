@@ -108,6 +108,13 @@ export function enablePatches() {
 			return
 		}
 
+		if (state.scope_.processedForPatches.has(state)) {
+			debugLog("Skipping already processed state for patches", state)
+			return
+		}
+
+		state.scope_.processedForPatches.add(state)
+
 		// Construct the full path for this state
 
 		switch (state.type_) {
