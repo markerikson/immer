@@ -43,7 +43,14 @@ function createInitialState(arraySize = BENCHMARK_CONFIG.arraySize) {
 			id: i,
 			name: `name-${i}`,
 			isActive: i % 2 === 0
-		}))
+		})),
+		api: {
+			queries: {},
+			provided: {
+				keys: {}
+			},
+			subscriptions: {}
+		}
 	}
 	return initialState
 }
@@ -52,7 +59,7 @@ const MAX = 1
 
 const BENCHMARK_CONFIG = {
 	iterations: 1,
-	arraySize: 10000,
+	arraySize: 200,
 	nestedArraySize: 100,
 	multiUpdateCount: 5,
 	reuseStateIterations: 10
@@ -117,6 +124,26 @@ const reverseArray = () => ({
 	type: "test/reverseArray"
 })
 
+// RTKQ-style action creators
+const rtkqPending = index => ({
+	type: "rtkq/pending",
+	payload: {
+		cacheKey: `some("test-${index}-")`,
+		requestId: `req-${index}`,
+		id: `test-${index}-`
+	}
+})
+
+const rtkqResolved = index => ({
+	type: "rtkq/resolved",
+	payload: {
+		cacheKey: `some("test-${index}-")`,
+		requestId: `req-${index}`,
+		id: `test-${index}-`,
+		data: `test-${index}-1`
+	}
+})
+
 const actions = {
 	add,
 	remove,
@@ -128,7 +155,10 @@ const actions = {
 	"update-multiple": updateMultiple,
 	"remove-high": removeHigh,
 	"sortById-reverse": sortByIdReverse,
-	"reverse-array": reverseArray
+	"reverse-array": reverseArray,
+	// RTKQ-style actions
+	"rtkq-pending": rtkqPending,
+	"rtkq-resolved": rtkqResolved
 }
 
 const immerProducers = {
@@ -175,6 +205,67 @@ const setStrictIteration = {
 	mutativeCompat: noop,
 	structura: noop,
 	limu: noop
+}
+
+// RTKQ-style separate reducer functions (simulating separate RTK slices)
+const updateQueries = (queries, action) => {
+	switch (action.type) {
+		case "rtkq/pending":
+			return {
+				...queries,
+				[action.payload.cacheKey]: {
+					id: action.payload.id,
+					status: "pending",
+					data: undefined
+				}
+			}
+		case "rtkq/resolved":
+			return {
+				...queries,
+				[action.payload.cacheKey]: {
+					...queries[action.payload.cacheKey],
+					status: "fulfilled",
+					data: action.payload.data
+				}
+			}
+		default:
+			return queries
+	}
+}
+
+const updateProvided = (provided, action) => {
+	switch (action.type) {
+		case "rtkq/pending":
+		case "rtkq/resolved":
+			return {
+				...provided,
+				keys: {
+					...provided.keys,
+					[action.payload.cacheKey]: {}
+				}
+			}
+		default:
+			return provided
+	}
+}
+
+const updateSubscriptions = (subscriptions, action) => {
+	switch (action.type) {
+		case "rtkq/pending":
+			return {
+				...subscriptions,
+				[action.payload.cacheKey]: {
+					[action.payload.requestId]: {
+						pollingInterval: 0,
+						skipPollingIfUnfocused: false
+					}
+				}
+			}
+		case "rtkq/resolved":
+			return subscriptions // No change on resolved
+		default:
+			return subscriptions
+	}
 }
 
 const vanillaReducer = (state = createInitialState(), action) => {
@@ -283,6 +374,18 @@ const vanillaReducer = (state = createInitialState(), action) => {
 				largeArray: newArray
 			}
 		}
+		case "rtkq/pending":
+		case "rtkq/resolved": {
+			// Simulate separate RTK slice reducers with combined reducer pattern
+			return {
+				...state,
+				api: {
+					queries: updateQueries(state.api.queries, action),
+					provided: updateProvided(state.api.provided, action),
+					subscriptions: updateSubscriptions(state.api.subscriptions, action)
+				}
+			}
+		}
 		default:
 			return state
 	}
@@ -354,6 +457,30 @@ const createImmerReducer = produce => {
 				}
 				case "test/reverseArray": {
 					draft.largeArray.reverse()
+					break
+				}
+				case "rtkq/pending": {
+					// Simulate separate RTK slice reducers with combined reducer pattern
+					const cacheKey = action.payload.cacheKey
+					draft.api.queries[cacheKey] = {
+						id: action.payload.id,
+						status: "pending",
+						data: undefined
+					}
+					draft.api.provided.keys[cacheKey] = {}
+					draft.api.subscriptions[cacheKey] = {
+						[action.payload.requestId]: {
+							pollingInterval: 0,
+							skipPollingIfUnfocused: false
+						}
+					}
+					break
+				}
+				case "rtkq/resolved": {
+					const cacheKey = action.payload.cacheKey
+					draft.api.queries[cacheKey].status = "fulfilled"
+					draft.api.queries[cacheKey].data = action.payload.data
+					// provided and subscriptions don't change on resolved
 					break
 				}
 			}
@@ -455,6 +582,41 @@ function createBenchmarks() {
 				state = reducers[version](state, actions["update-high"](2))
 				state = reducers[version](state, actions["update-multiple"](3))
 				state = reducers[version](state, actions.remove(getValidIndex()))
+
+				setAutoFreezes[version](false)
+			}
+
+			yield benchMethod
+		}).args({
+			version: Object.keys(reducers),
+			freeze
+		})
+	})
+
+	// RTKQ-style benchmark - executes multiple reducer calls in sequence
+	summary(function() {
+		bench(`rtkq-sequence: $version (freeze: $freeze)`, function*(args) {
+			const version = args.get("version")
+			const freeze = args.get("freeze")
+
+			function benchMethod() {
+				setAutoFreezes[version](freeze)
+				setStrictIteration[version](false)
+
+				let state = createInitialState()
+				// Use smaller array size for RTKQ benchmark due to exponential scaling
+				// 100 items = ~15ms, 200 items = ~32ms, so 10000 would be impractical
+				const arraySize = 100
+
+				// Phase 1: Execute all pending actions
+				for (let i = 0; i < arraySize; i++) {
+					state = reducers[version](state, actions["rtkq-pending"](i))
+				}
+
+				// Phase 2: Execute all resolved actions
+				for (let i = 0; i < arraySize; i++) {
+					state = reducers[version](state, actions["rtkq-resolved"](i))
+				}
 
 				setAutoFreezes[version](false)
 			}
