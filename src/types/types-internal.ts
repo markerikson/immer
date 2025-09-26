@@ -4,7 +4,8 @@ import {
 	ProxyObjectState,
 	ProxyArrayState,
 	MapState,
-	DRAFT_STATE
+	DRAFT_STATE,
+	Patch
 } from "../internal"
 
 export type Objectish = AnyObject | AnyArray | AnyMap | AnySet
@@ -29,7 +30,7 @@ export interface ImmerBaseState {
 	finalized_: boolean
 	isManual_: boolean
 	// Finalization cleanup callbacks
-	callbacks_: (() => void)[]
+	callbacks_: ((patches?: Patch[], inversePatches?: Patch[]) => void)[]
 }
 
 export type ImmerState =

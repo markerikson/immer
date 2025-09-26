@@ -18,10 +18,18 @@ import {
 	isFrozen,
 	isMap,
 	get,
-	archTypeToString
+	archTypeToString,
+	Patch
 } from "../internal"
 import {debugLog} from "../internal"
 import util from "util"
+
+export type GeneratePatches = (
+	state: ImmerState,
+	basePath: PatchPath,
+	patches: Patch[],
+	inversePatches: Patch[]
+) => void
 
 export function processResult(result: any, scope: ImmerScope) {
 	scope.unfinalizedDrafts_ = scope.drafts_.length
@@ -100,7 +108,7 @@ function finalizeAlternate(
 		if (state.callbacks_) {
 			while (state.callbacks_.length > 0) {
 				const callback = state.callbacks_.pop()!
-				callback()
+				callback(rootScope.patches_, rootScope.inversePatches_)
 			}
 		}
 
@@ -108,6 +116,7 @@ function finalizeAlternate(
 
 		// Preserve existing patch generation logic
 		if (path && rootScope.patches_) {
+			debugLog("generating patches for finalized draft", {state})
 			getPlugin("Patches").generatePatches_(
 				state,
 				path,
@@ -280,7 +289,7 @@ export function registerChildFinalizationCallback(
 	child: ImmerState,
 	key: string | number | symbol
 ) {
-	parent.callbacks_.push(function childCleanup() {
+	parent.callbacks_.push(function childCleanup(patches, inversePatches) {
 		const parentCopy = parent.copy_ || parent.base_
 		const state: ImmerState = child
 
@@ -290,7 +299,9 @@ export function registerChildFinalizationCallback(
 			modified: state?.modified_,
 			finalized: state?.finalized_,
 			parentType: archTypeToString(parent.type_),
-			childType: archTypeToString(state?.type_)
+			childType: archTypeToString(state?.type_),
+			patches,
+			inversePatches
 		})
 
 		if (!state) {
@@ -389,6 +400,22 @@ export function registerChildFinalizationCallback(
 		finalizeSetValue(state)
 
 		set(parentCopy, updatedKey, updatedValue)
+
+		// Add patch generation here
+		if (patches && inversePatches && rootScope.patches_) {
+			const patchPlugin = getPlugin("Patches")
+			const basePath = patchPlugin.getPath(parent)
+
+			debugLog("Generating patches for finalized child", {basePath})
+			if (basePath) {
+				patchPlugin.generatePatches_(
+					state,
+					basePath.concat(updatedKey as string),
+					patches,
+					inversePatches
+				)
+			}
+		}
 	})
 }
 

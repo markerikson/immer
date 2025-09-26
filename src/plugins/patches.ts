@@ -20,7 +20,8 @@ import {
 	isDraft,
 	isDraftable,
 	NOTHING,
-	errors
+	errors,
+	debugLog
 } from "../internal"
 
 export function enablePatches() {
@@ -42,12 +43,73 @@ export function enablePatches() {
 	const ADD = "add"
 	const REMOVE = "remove"
 
+	function getPath(state: ImmerState): PatchPath | null {
+		const path: PatchPath = []
+		let current: ImmerState | undefined = state
+
+		while (current && current.parent_) {
+			// Find the key that points to this state in the parent
+			const parent = current.parent_
+			const parentCopy = parent.copy_ || parent.base_
+
+			if (parent.type_ === ArchType.Array) {
+				// For arrays, find the index
+				const index = (parentCopy as any[]).findIndex(
+					item => item === current!.draft_ || item === current!.base_
+				)
+				if (index !== -1) {
+					path.unshift(index)
+				}
+			} else if (
+				parent.type_ === ArchType.Object ||
+				parent.type_ === ArchType.Map
+			) {
+				// For objects/maps, find the key
+				for (const [key, val] of Object.entries(parentCopy)) {
+					if (val === current!.draft_ || val === current!.base_) {
+						path.unshift(key)
+						break
+					}
+				}
+			}
+
+			current = current.parent_
+		}
+
+		return path //.length > 0 ? path : null
+	}
+
+	function constructPath(state: ImmerState, rootPath: PatchPath): PatchPath {
+		// If rootPath is provided, use it
+		if (rootPath && rootPath.length > 0) {
+			return rootPath
+		}
+
+		// Otherwise, construct path from state hierarchy
+		return getPath(state) || []
+	}
+
 	function generatePatches_(
 		state: ImmerState,
 		basePath: PatchPath,
 		patches: Patch[],
 		inversePatches: Patch[]
 	): void {
+		const fullPath = constructPath(state, basePath)
+		debugLog("generatePatches_", {
+			state,
+			basePath,
+			patches,
+			inversePatches,
+			fullPath
+		})
+		if (!state.modified_) {
+			// || state.finalized_) {
+			return
+		}
+
+		// Construct the full path for this state
+
 		switch (state.type_) {
 			case ArchType.Object:
 			case ArchType.Map:
@@ -312,6 +374,7 @@ export function enablePatches() {
 	loadPlugin("Patches", {
 		applyPatches_,
 		generatePatches_,
-		generateReplacementPatches_
+		generateReplacementPatches_,
+		getPath
 	})
 }

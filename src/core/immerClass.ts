@@ -268,8 +268,8 @@ export function createProxy<T extends Objectish>(
 		// It's a root draft, register it with the scope
 		// debugLog("Registering root draft with scope")
 
-		state.callbacks_.push(function rootDraftCleanup() {
-			// debugLog("Finalizing root draft")
+		state.callbacks_.push(function rootDraftCleanup(patches, inversePatches) {
+			debugLog("Finalizing root draft", {patches, inversePatches})
 			if (state.type_ === ArchType.Set && state.modified_) {
 				const copy = new Set(state.copy_!)
 				state.copy_!.clear()
@@ -280,6 +280,15 @@ export function createProxy<T extends Objectish>(
 						: value
 					state.copy_!.add(finalValue)
 				})
+			}
+
+			if (state.modified_ && patches && inversePatches) {
+				getPlugin("Patches").generatePatches_(
+					state,
+					[],
+					patches,
+					inversePatches
+				)
 			}
 		})
 	}

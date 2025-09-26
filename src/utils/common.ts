@@ -14,7 +14,7 @@ import {
 
 export const getPrototypeOf = Object.getPrototypeOf
 
-const ENABLE_LOGGING = false
+const ENABLE_LOGGING = true
 
 const noop: typeof console.log = () => {}
 

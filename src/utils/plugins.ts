@@ -26,6 +26,7 @@ const plugins: {
 			inversePatches: Patch[]
 		): void
 		applyPatches_<T>(draft: T, patches: readonly Patch[]): T
+		getPath: (state: ImmerState) => PatchPath | null
 	}
 	MapSet?: {
 		proxyMap_<T extends AnyMap>(target: T, parent?: ImmerState, key?: any): T
