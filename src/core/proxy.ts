@@ -143,7 +143,6 @@ export const objectTraps: ProxyHandler<ProxyState> = {
 			(state as ProxyArrayState).inBulkOperation &&
 			isArrayIndex(prop)
 		) {
-
 			// Return raw value during bulk operations, create proxy only if modified
 			return value
 		}
@@ -290,42 +289,26 @@ type MutatingArrayMethod =
 	| "splice"
 	| "reverse"
 	| "sort"
-	| "fill"
-	| "copyWithin"
 
 // Ensure type compatibility with Array.prototype
 type ValidatedArrayMethod = keyof Pick<Array<any>, MutatingArrayMethod>
 
-interface ArrayMethodHandler {
-	handler: (state: ProxyArrayState, args: any[]) => any
-	requiresElementAccess: boolean
-}
-
-// Object lookup table for O(1) method detection
-const MUTATING_ARRAY_METHODS: Record<
-	MutatingArrayMethod,
-	ArrayMethodHandler
-> = {
-	push: {handler: handlePush, requiresElementAccess: false},
-	pop: {handler: handlePop, requiresElementAccess: false},
-	shift: {handler: handleShift, requiresElementAccess: false},
-	unshift: {handler: handleUnshift, requiresElementAccess: false},
-	splice: {handler: handleSplice, requiresElementAccess: false},
-	reverse: {handler: handleReverse, requiresElementAccess: false},
-	sort: {handler: handleSort, requiresElementAccess: true},
-	fill: {handler: handleFill, requiresElementAccess: false},
-	copyWithin: {handler: handleCopyWithin, requiresElementAccess: false}
-} as const
+// Optimized method detection using array-based lookup
+const MUTATING_METHODS = [
+	"push",
+	"pop",
+	"shift",
+	"unshift",
+	"splice",
+	"reverse",
+	"sort"
+]
 
 // Type guard for method detection
 export function isMutatingArrayMethod(
 	method: string
 ): method is MutatingArrayMethod {
-	//return method in MUTATING_ARRAY_METHODS
-	return Object.prototype.hasOwnProperty.call(
-		MUTATING_ARRAY_METHODS,
-		method as MutatingArrayMethod
-	)
+	return MUTATING_METHODS.includes(method)
 }
 
 function enterBulkOperation(
@@ -341,28 +324,94 @@ function exitBulkOperation(state: ProxyArrayState) {
 	state.bulkOperationMethod = undefined
 }
 
+// Shared utility functions for array method handlers
+function executeArrayMethod<T>(
+	state: ProxyArrayState,
+	operation: () => T,
+	markLength = true
+): T {
+	prepareCopy(state)
+	const result = operation()
+	markChanged(state)
+	if (markLength) state.assigned_["length"] = true
+	return result
+}
+
+function markAllIndicesReassigned(state: ProxyArrayState) {
+	for (let i = 0; i < state.copy_!.length; i++) {
+		state.assigned_[i] = true
+	}
+}
+
+// Consolidated handler functions
+function handleSimpleOperation(
+	state: ProxyArrayState,
+	method: string,
+	args: any[]
+) {
+	return executeArrayMethod(state, () => {
+		const result = (state.copy_! as any)[method](...args)
+
+		// Handle index reassignment for shifting methods
+		if (method === "shift" || method === "unshift") {
+			markAllIndicesReassigned(state)
+		}
+
+		// Return appropriate value based on method
+		return method === "push" || method === "unshift"
+			? result
+			: method === "pop" || method === "shift"
+			? result
+			: state.draft_
+	})
+}
+
+function handleReorderingOperation(
+	state: ProxyArrayState,
+	method: string,
+	args: any[]
+) {
+	return executeArrayMethod(
+		state,
+		() => {
+			;(state.copy_! as any)[method](...args)
+			markAllIndicesReassigned(state)
+			return state.draft_
+		},
+		false
+	) // Don't mark length as changed
+}
+
 export function createMethodInterceptor(
 	state: ProxyArrayState,
 	method: MutatingArrayMethod
 ) {
 	return function interceptedMethod(...args: any[]) {
-		const methodConfig = MUTATING_ARRAY_METHODS[method]
-		if (!methodConfig) {
-			// Fallback to original method (should never happen with type safety)
-			return latest(state)[method](...args)
-		}
-
 		// Enter bulk operation mode
 		enterBulkOperation(state, method)
 
-		if (!methodConfig.handler) {
-			throw new Error("Immer: No handler for array method: " + method)
-		}
-
 		try {
-			// Execute optimized handler
-			const result = methodConfig.handler(state, args)
-			return result
+			// Direct method dispatch - no configuration lookup needed
+			switch (method) {
+				case "push":
+				case "pop":
+				case "shift":
+				case "unshift":
+					return handleSimpleOperation(state, method, args)
+
+				case "reverse":
+				case "sort":
+					return handleReorderingOperation(state, method, args)
+
+				case "splice":
+					return executeArrayMethod(state, () =>
+						state.copy_!.splice(...(args as [number, number, ...any[]]))
+					)
+
+				default:
+					// Fallback to original method
+					return latest(state)[method](...args)
+			}
 		} finally {
 			debugLog("Exiting bulk operation mode", {
 				method,
@@ -373,187 +422,6 @@ export function createMethodInterceptor(
 			exitBulkOperation(state)
 		}
 	}
-}
-
-export function handleSplice(state: ProxyArrayState, args: any[]): any[] {
-	const [start, deleteCount, ...items] = args
-	prepareCopy(state)
-
-	// Perform splice directly on copy
-	const result = state.copy_!.splice(start, deleteCount, ...items)
-
-	// Mark as changed and update length
-	markChanged(state)
-	state.assigned_["length"] = true
-
-	return result
-}
-
-export function handleReverse(state: ProxyArrayState, args: any[]): any[] {
-	prepareCopy(state)
-
-	const {copy_} = state
-
-	// Direct reverse on copy
-	copy_!.reverse()
-
-	// Mark all indices as reassigned
-	for (let i = 0; i < copy_!.length; i++) {
-		state.assigned_[i] = true
-	}
-
-	markChanged(state)
-	return state.draft_
-}
-
-export function handleSort(state: ProxyArrayState, args: any[]): any[] {
-	const [compareFn] = args
-	prepareCopy(state)
-
-	const {copy_} = state
-
-	// During bulk operations, we can safely pass raw values to comparators
-	// since we're not allowing individual element access anyway
-	if (compareFn) {
-		copy_!.sort(compareFn) // Pass raw values directly
-	} else {
-		copy_!.sort()
-	}
-
-	// Mark all indices as reassigned
-	for (let i = 0; i < copy_!.length; i++) {
-		state.assigned_[i] = true
-	}
-
-	markChanged(state)
-	return state.draft_
-}
-
-export function handlePush(state: ProxyArrayState, args: any[]): number {
-	prepareCopy(state)
-
-	// Perform push directly on copy
-	const result = state.copy_!.push(...args)
-
-	// Mark as changed and update length
-	markChanged(state)
-	state.assigned_["length"] = true
-
-	return result
-}
-
-export function handlePop(state: ProxyArrayState, args: any[]): any {
-	prepareCopy(state)
-
-	// Perform pop directly on copy
-	const result = state.copy_!.pop()
-
-	// Mark as changed and update length
-	markChanged(state)
-	state.assigned_["length"] = true
-
-	return result
-}
-
-export function handleShift(state: ProxyArrayState, args: any[]): any {
-	prepareCopy(state)
-
-	// Perform shift directly on copy
-	const result = state.copy_!.shift()
-
-	// Mark as changed and update length
-	markChanged(state)
-	state.assigned_["length"] = true
-
-	// Mark all remaining indices as reassigned (elements shifted down)
-	for (let i = 0; i < state.copy_!.length; i++) {
-		state.assigned_[i] = true
-	}
-
-	return result
-}
-
-export function handleUnshift(state: ProxyArrayState, args: any[]): number {
-	prepareCopy(state)
-
-	// Perform unshift directly on copy
-	const result = state.copy_!.unshift(...args)
-
-	// Mark as changed and update length
-	markChanged(state)
-	state.assigned_["length"] = true
-
-	// Mark all indices as reassigned (all elements shifted up)
-	for (let i = 0; i < state.copy_!.length; i++) {
-		state.assigned_[i] = true
-	}
-
-	return result
-}
-
-export function handleFill(state: ProxyArrayState, args: any[]): any[] {
-	const [value, start = 0, end] = args
-	prepareCopy(state)
-
-	// Perform fill directly on copy
-	state.copy_!.fill(value, start, end)
-
-	// Mark as changed
-	markChanged(state)
-
-	// Mark affected indices as reassigned
-	const actualStart =
-		start < 0
-			? Math.max(0, state.copy_!.length + start)
-			: Math.min(start, state.copy_!.length)
-	const actualEnd =
-		end === undefined
-			? state.copy_!.length
-			: end < 0
-			? Math.max(0, state.copy_!.length + end)
-			: Math.min(end, state.copy_!.length)
-
-	for (let i = actualStart; i < actualEnd; i++) {
-		state.assigned_[i] = true
-	}
-
-	return state.draft_
-}
-
-export function handleCopyWithin(state: ProxyArrayState, args: any[]): any[] {
-	const [target, start = 0, end] = args
-	prepareCopy(state)
-
-	// Perform copyWithin directly on copy
-	state.copy_!.copyWithin(target, start, end)
-
-	// Mark as changed
-	markChanged(state)
-
-	// Mark affected indices as reassigned
-	const actualStart =
-		start < 0
-			? Math.max(0, state.copy_!.length + start)
-			: Math.min(start, state.copy_!.length)
-	const actualEnd =
-		end === undefined
-			? state.copy_!.length
-			: end < 0
-			? Math.max(0, state.copy_!.length + end)
-			: Math.min(end, state.copy_!.length)
-	const actualTarget =
-		target < 0 ? Math.max(0, state.copy_!.length + target) : target
-
-	const copyLength = actualEnd - actualStart
-	for (
-		let i = 0;
-		i < copyLength && actualTarget + i < state.copy_!.length;
-		i++
-	) {
-		state.assigned_[actualTarget + i] = true
-	}
-
-	return state.draft_
 }
 
 // Access a property without creating an Immer draft.
