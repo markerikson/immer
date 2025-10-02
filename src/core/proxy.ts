@@ -404,11 +404,18 @@ export function createMethodInterceptor(
 				case "sort":
 					return handleReorderingOperation(state, method, args)
 
-				case "splice":
-					return executeArrayMethod(state, () =>
+				case "splice": {
+					// const result = state.copy_!.splice(
+					// 	...(args as [number, number, ...any[]])
+					// )
+					// markAllIndicesReassigned(state)
+					// return result
+					const res = executeArrayMethod(state, () =>
 						state.copy_!.splice(...(args as [number, number, ...any[]]))
 					)
-
+					markAllIndicesReassigned(state)
+					return res
+				}
 				default:
 					// Fallback to original method
 					return latest(state)[method](...args)
