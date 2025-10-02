@@ -26,9 +26,9 @@ import {
 } from "../internal"
 
 interface ProxyBaseState extends ImmerBaseState {
-	assigned_: {
-		[property: string]: boolean
-	}
+	// assigned_: {
+	// 	[property: string]: boolean
+	// }
 	parent_?: ImmerState
 	revoke_(): void
 	revoked_: boolean
@@ -71,7 +71,7 @@ export function createProxyProxy<T extends Objectish>(
 		// Used during finalization.
 		finalized_: false,
 		// Track which properties have been assigned (true) or deleted (false).
-		assigned_: {},
+		assigned_: new Map(),
 		// The parent draft state.
 		parent_: parent,
 		// The base state.
@@ -182,7 +182,7 @@ export const objectTraps: ProxyHandler<ProxyState> = {
 			const currentState: ProxyObjectState = current?.[DRAFT_STATE]
 			if (currentState && currentState.base_ === value) {
 				state.copy_![prop] = value
-				state.assigned_[prop] = false
+				state.assigned_!.set(prop, false)
 				return true
 			}
 			if (is(value, current) && (value !== undefined || has(state.base_, prop)))
@@ -202,7 +202,7 @@ export const objectTraps: ProxyHandler<ProxyState> = {
 
 		// @ts-ignore
 		state.copy_![prop] = value
-		state.assigned_[prop] = true
+		state.assigned_!.set(prop, true)
 
 		handleCrossReference(state, prop, value)
 		return true
@@ -210,12 +210,13 @@ export const objectTraps: ProxyHandler<ProxyState> = {
 	deleteProperty(state, prop: string) {
 		// The `undefined` check is a fast path for pre-existing keys.
 		if (peek(state.base_, prop) !== undefined || prop in state.base_) {
-			state.assigned_[prop] = false
+			state.assigned_!.set(prop, false)
 			prepareCopy(state)
 			markChanged(state)
 		} else {
 			// if an originally not assigned property was deleted
-			delete state.assigned_[prop]
+			//delete state.assigned_[prop]
+			state.assigned_!.delete(prop)
 		}
 		if (state.copy_) {
 			delete state.copy_[prop]
@@ -333,13 +334,13 @@ function executeArrayMethod<T>(
 	prepareCopy(state)
 	const result = operation()
 	markChanged(state)
-	if (markLength) state.assigned_["length"] = true
+	if (markLength) state.assigned_!.set("length", true)
 	return result
 }
 
 function markAllIndicesReassigned(state: ProxyArrayState) {
 	for (let i = 0; i < state.copy_!.length; i++) {
-		state.assigned_[i] = true
+		state.assigned_!.set(i, true)
 	}
 }
 

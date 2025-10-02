@@ -29,6 +29,8 @@ export interface ImmerBaseState {
 	modified_: boolean
 	finalized_: boolean
 	isManual_: boolean
+	assigned_: Map<any, boolean> | undefined
+	key?: string | number | symbol
 	// Finalization cleanup callbacks
 	callbacks_: ((patches?: Patch[], inversePatches?: Patch[]) => void)[]
 }

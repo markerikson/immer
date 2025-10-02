@@ -191,7 +191,8 @@ export function enableMapSet() {
 				drafts_: new Map(),
 				revoked_: false,
 				isManual_: false,
-				callbacks_: []
+				callbacks_: [],
+				assigned_: undefined
 			}
 
 			// debugLog("Draft set:", target)

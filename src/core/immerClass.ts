@@ -257,6 +257,7 @@ export function createProxy<T extends Objectish>(
 	// Ensure the parent callbacks are passed down so we actually
 	// track all callbacks added throughout the tree
 	state.callbacks_ = parent?.callbacks_ ?? []
+	state.key = key
 
 	if (parent && key !== undefined) {
 		// debugLog("Registering child finalization callback", {

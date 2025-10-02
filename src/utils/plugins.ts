@@ -58,7 +58,7 @@ export function loadPlugin<K extends keyof Plugins>(
 export interface MapState extends ImmerBaseState {
 	type_: ArchType.Map
 	copy_: AnyMap | undefined
-	assigned_: Map<any, boolean> | undefined
+	// assigned_: Map<any, boolean> | undefined
 	base_: AnyMap
 	revoked_: boolean
 	draft_: Drafted<AnyMap, MapState>

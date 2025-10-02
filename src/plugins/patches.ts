@@ -156,7 +156,7 @@ export function enablePatches() {
 
 		// Process replaced indices.
 		for (let i = 0; i < base_.length; i++) {
-			if (assigned_[i] && copy_[i] !== base_[i]) {
+			if (assigned_?.get(i) && copy_[i] !== base_[i]) {
 				const path = basePath.concat([i])
 				patches.push({
 					op: REPLACE,
