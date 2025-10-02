@@ -423,11 +423,17 @@ function finalizeWithPatches(
 	patches?: Patch[],
 	inversePatches?: Patch[]
 ) {
+	// const shouldFinalize =
+	// 	state.modified_ &&
+	// 	state.assigned_ &&
+	// 	state.assigned_.size > 0 &&
+	// 	!state.finalized_
+
 	const shouldFinalize =
 		state.modified_ &&
-		state.assigned_ &&
-		state.assigned_.size > 0 &&
-		!state.finalized_
+		!state.finalized_ &&
+		(state.type_ === ArchType.Set ||
+			(state.assigned_ && state.assigned_.size > 0))
 
 	if (shouldFinalize) {
 		if (patches && inversePatches) {

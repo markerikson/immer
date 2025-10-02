@@ -276,16 +276,16 @@ export function enablePatches() {
 			// fullPath
 		})
 
-		const shouldFinalize =
-			state.modified_ &&
-			state.assigned_ &&
-			state.assigned_.size > 0 &&
-			!state.finalized_
+		// const shouldFinalize =
+		// 	state.modified_ &&
+		// 	state.assigned_ &&
+		// 	state.assigned_.size > 0 &&
+		// 	!state.finalized_
 
-		if (!shouldFinalize) {
-			debugLog("Skipping patch generation, nothing modified", state)
-			return
-		}
+		// if (!shouldFinalize) {
+		// 	debugLog("Skipping patch generation, nothing modified", state)
+		// 	return
+		// }
 
 		// if (state.finalized_) {
 		// 	return
