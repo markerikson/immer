@@ -423,7 +423,11 @@ export function enablePatches() {
 			const op = !assignedValue ? REMOVE : has(base_, key) ? REPLACE : ADD
 			if (origValue === value && op === REPLACE) return
 			const path = basePath.concat(key as any)
-			patches.push(op === REMOVE ? {op, path} : {op, path, value})
+			patches.push(
+				op === REMOVE
+					? {op, path}
+					: {op, path, value: clonePatchValueIfNeeded(value)}
+			)
 			inversePatches.push(
 				op === ADD
 					? {op: REMOVE, path}
