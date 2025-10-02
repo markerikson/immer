@@ -345,6 +345,22 @@ export function registerChildFinalizationCallback(
 			// 	parentCopy,
 			// 	currentIndex
 			// })
+		if (parent.type_ === ArchType.Map) {
+			const currentValue = get(parentCopy, key)
+
+			// If value not at original key, search for where it actually is
+			if (
+				currentValue === undefined ||
+				(currentValue !== state.draft_ && currentValue !== state)
+			) {
+				// Search the Map to find where this draft actually is
+				for (const [k, v] of (parentCopy as Map<any, any>).entries()) {
+					if (v === state.draft_ || v === state) {
+						updatedKey = k
+						break
+					}
+				}
+			}
 		}
 
 		const childCopy = get(parentCopy, updatedKey)
