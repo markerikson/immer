@@ -21,7 +21,8 @@ import {
 	isDraftable,
 	NOTHING,
 	errors,
-	debugLog
+	debugLog,
+	DRAFT_STATE
 } from "../internal"
 
 export function enablePatches() {
@@ -43,6 +44,7 @@ export function enablePatches() {
 	const ADD = "add"
 	const REMOVE = "remove"
 
+	/*
 	function getPath(state: ImmerState): PatchPath | null {
 		const path: PatchPath = []
 		let current: ImmerState | undefined = state
@@ -88,6 +90,101 @@ export function enablePatches() {
 		// Otherwise, construct path from state hierarchy
 		return getPath(state) || []
 	}
+	*/
+
+	function getPath(state: ImmerState): PatchPath | null {
+		const path: PatchPath = []
+		let current: ImmerState | undefined = state
+
+		while (current && current.parent_) {
+			const parent = current.parent_
+			const parentCopy = parent.copy_ || parent.base_
+
+			// NEW: Use stored key if available
+			if (current.key !== undefined) {
+				const key = current.key
+
+				// VALIDATION 1: Check if draft still exists at original key
+				const valueAtKey = get(parentCopy, key)
+				const stateAtKey = valueAtKey?.[DRAFT_STATE]
+
+				// If the state at the original key is not this state, path is invalid
+				if (stateAtKey && stateAtKey !== current) {
+					return null // ← PATH IS INVALID - draft moved or replaced
+				}
+
+				// VALIDATION 2: For arrays, verify key still exists
+				if (parent.type_ === ArchType.Array) {
+					const arrayLength = (parentCopy as any[]).length
+					const index = typeof key === "number" ? key : parseInt(key as string)
+					if (index >= arrayLength) {
+						return null // ← PATH IS INVALID - index out of bounds
+					}
+				}
+
+				// VALIDATION 3: For objects/maps, verify key still exists
+				if (parent.type_ === ArchType.Object || parent.type_ === ArchType.Map) {
+					if (!has(parentCopy, key)) {
+						return null // ← PATH IS INVALID - key deleted
+					}
+				}
+
+				path.unshift(key as string)
+			} else {
+				// Fallback: try to find the state (but this is less reliable)
+				if (parent.type_ === ArchType.Array) {
+					const index = (parentCopy as any[]).findIndex(
+						item => item === current!.draft_ || item === current!.base_
+					)
+					if (index === -1) {
+						return null // ← Can't find state in parent
+					}
+					path.unshift(index)
+				} else if (
+					parent.type_ === ArchType.Object ||
+					parent.type_ === ArchType.Map
+				) {
+					let found = false
+					for (const [key, val] of Object.entries(parentCopy)) {
+						if (val === current!.draft_ || val === current!.base_) {
+							path.unshift(key)
+							found = true
+							break
+						}
+					}
+					if (!found) {
+						return null // ← Can't find state in parent
+					}
+				}
+			}
+
+			current = current.parent_
+		}
+
+		// VALIDATION 4: Verify path can be resolved
+		if (path.length > 0) {
+			try {
+				resolvePath(state.copy_ || state.base_, path)
+			} catch (e) {
+				return null // ← PATH IS INVALID - can't resolve
+			}
+		}
+
+		return path
+	}
+
+	// NEW: Add resolvePath helper function
+	function resolvePath(base: any, path: PatchPath): any {
+		let current = base
+		for (let i = 0; i < path.length - 1; i++) {
+			const key = path[i]
+			current = get(current, key)
+			if (typeof current !== "object" || current === null) {
+				throw new Error(`Cannot resolve path at '${path.join("/")}'`)
+			}
+		}
+		return current
+	}
 
 	function generatePatches_(
 		state: ImmerState,
@@ -95,7 +192,7 @@ export function enablePatches() {
 		patches: Patch[],
 		inversePatches: Patch[]
 	): void {
-		const fullPath = constructPath(state, basePath)
+		const fullPath = getPath(state)
 		debugLog("generatePatches_", {
 			state,
 			basePath,
@@ -103,6 +200,10 @@ export function enablePatches() {
 			inversePatches,
 			fullPath
 		})
+
+		if (state.finalized_) {
+			return
+		}
 		if (!state.modified_) {
 			// || state.finalized_) {
 			return

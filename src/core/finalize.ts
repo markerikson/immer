@@ -101,7 +101,6 @@ function finalizeAlternate(
 	}
 	// REPLACE: Not finalized yet, use callback-based finalization
 	if (!state.finalized_) {
-		state.finalized_ = true
 		state.scope_.unfinalizedDrafts_--
 
 		// Execute all registered callbacks
@@ -126,6 +125,8 @@ function finalizeAlternate(
 		}
 
 		// debugLog("Final result: ", util.inspect(result, {depth: Infinity}))
+
+		state.finalized_ = true
 	}
 
 	return state.copy_
@@ -376,7 +377,6 @@ export function registerChildFinalizationCallback(
 			return
 		}
 
-		state.finalized_ = true
 		state.scope_.unfinalizedDrafts_--
 
 		let updatedValue
@@ -404,18 +404,15 @@ export function registerChildFinalizationCallback(
 		// Add patch generation here
 		if (patches && inversePatches && rootScope.patches_) {
 			const patchPlugin = getPlugin("Patches")
-			const basePath = patchPlugin.getPath(parent)
+			const childPath = patchPlugin.getPath(state)
 
-			debugLog("Generating patches for finalized child", {basePath})
-			if (basePath) {
-				patchPlugin.generatePatches_(
-					state,
-					basePath.concat(updatedKey as string),
-					patches,
-					inversePatches
-				)
+			debugLog("Generating patches for finalized child", {childPath})
+			if (childPath !== null) {
+				patchPlugin.generatePatches_(state, childPath, patches, inversePatches)
 			}
 		}
+
+		state.finalized_ = true
 	})
 }
 
