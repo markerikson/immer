@@ -12,6 +12,8 @@ import {
 	StrictMode
 } from "../internal"
 
+import util from "util"
+
 export const getPrototypeOf = Object.getPrototypeOf
 
 const ENABLE_LOGGING = true
@@ -25,6 +27,10 @@ export const debugLogger: typeof console.log = (...args) => {
 }
 
 export const debugLog = noop
+
+export function inspectDeep(value: any) {
+	return util.inspect(value, {depth: Infinity})
+}
 
 export function getProxyDraft<T extends any>(value: T): ImmerState | null {
 	if (typeof value !== "object") return null

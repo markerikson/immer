@@ -23,13 +23,9 @@ import {
 	errors,
 	debugLog,
 	DRAFT_STATE,
-	getProxyDraft
+	getProxyDraft,
+	inspectDeep
 } from "../internal"
-import util from "util"
-
-function inspectDeep(value: any) {
-	return util.inspect(value, {depth: Infinity})
-}
 
 export function enablePatches() {
 	const errorOffset = 16
@@ -186,16 +182,16 @@ export function enablePatches() {
 		// Step 1: Check if state has a stored key
 		if (Object.hasOwnProperty.call(state, "key") && state.key !== undefined) {
 			// Step 2: Validate the key is still valid in parent
-			debugLog("getPath: checking key in parent", {state})
+			// debugLog("getPath: checking key in parent", {state})
 			const parentCopy = state.parent_!.copy_ ?? state.parent_!.base_
 			const proxyDraft = getProxyDraft(get(parentCopy, state.key!))
 			const valueAtKey = get(parentCopy, state.key!)
 
-			debugLog("Path bailout check: ", {
-				valueAtKey,
-				proxyDraft,
-				stateBase: state.base_
-			})
+			// debugLog("Path bailout check: ", {
+			// 	valueAtKey,
+			// 	proxyDraft,
+			// 	stateBase: state.base_
+			// })
 
 			if (valueAtKey === undefined) {
 				return null
@@ -245,7 +241,7 @@ export function enablePatches() {
 
 		try {
 			// Validate path can be resolved from ROOT
-			debugLog("Resolving path: ", {state, path})
+			// debugLog("Resolving path: ", {state, path})
 			resolvePath(state.copy_, path)
 		} catch (e) {
 			return null // Path invalid
@@ -261,12 +257,12 @@ export function enablePatches() {
 			const key = path[i]
 			current = get(current, key)
 			if (typeof current !== "object" || current === null) {
-				debugLog(
-					"Failed to resolve at segment:",
-					key,
-					"current:",
-					inspectDeep({current, base})
-				)
+				// debugLog(
+				// 	"Failed to resolve at segment:",
+				// 	key,
+				// 	"current:",
+				// 	inspectDeep({current, base})
+				// )
 				throw new Error(`Cannot resolve path at '${path.join("/")}'`)
 			}
 		}
@@ -280,13 +276,13 @@ export function enablePatches() {
 		inversePatches: Patch[]
 	): void {
 		// const fullPath = getPath(state)
-		debugLog("generatePatches_", {
-			state,
-			basePath,
-			patches,
-			inversePatches
-			// fullPath
-		})
+		// debugLog("generatePatches_", {
+		// 	state,
+		// 	basePath,
+		// 	patches,
+		// 	inversePatches
+		// 	// fullPath
+		// })
 
 		// const shouldFinalize =
 		// 	state.modified_ &&
@@ -308,7 +304,7 @@ export function enablePatches() {
 		// }
 
 		if (state.scope_.processedForPatches.has(state)) {
-			debugLog("Skipping already processed state for patches", state)
+			// debugLog("Skipping already processed state for patches", state)
 			return
 		}
 
@@ -353,17 +349,14 @@ export function enablePatches() {
 			;[patches, inversePatches] = [inversePatches, patches]
 		}
 
-		debugLog(
-			"Generating array patch: ",
-			util.inspect(
-				{
-					base: state.base_,
-					copy: state.copy_,
-					assigned: state.assigned_
-				},
-				{depth: Infinity}
-			)
-		)
+		// debugLog(
+		// 	"Generating array patch: ",
+		// 	inspectDeep({
+		// 		base: state.base_,
+		// 		copy: state.copy_,
+		// 		assigned: state.assigned_
+		// 	})
+		// )
 
 		// Process replaced indices.
 		for (let i = 0; i < base_.length; i++) {

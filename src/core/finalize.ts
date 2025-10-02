@@ -19,7 +19,9 @@ import {
 	isMap,
 	get,
 	archTypeToString,
-	Patch
+	Patch,
+	getProxyDraft,
+	inspectDeep
 } from "../internal"
 import {debugLog} from "../internal"
 import util from "util"
@@ -111,7 +113,7 @@ function finalizeAlternate(
 
 		finalizeWithPatches(state, rootScope.patches_, rootScope.inversePatches_)
 
-		// debugLog("Final result: ", util.inspect(result, {depth: Infinity}))
+		// debugLog("Final result: ", util.inspect(state.copy_, {depth: Infinity}))
 	}
 
 	return state.copy_
@@ -261,6 +263,7 @@ function finalizeProperty(
 }
 
 function maybeFreeze(scope: ImmerScope, value: any, deep = false) {
+	// debugLog("maybeFreeze: ", {scope, value, deep})
 	// we never freeze for a non-root scope; as it would prevent pruning for drafts inside wrapping objects
 	if (!scope.parent_ && scope.immer_.autoFreeze_ && scope.canAutoFreeze_) {
 		freeze(value, deep)
@@ -279,16 +282,16 @@ export function registerChildFinalizationCallback(
 		const parentCopy = parent.copy_ || parent.base_
 		const state: ImmerState = child
 
-		debugLog("Child finalization callback", {
-			key,
-			hasState: !!state,
-			modified: state?.modified_,
-			finalized: state?.finalized_,
-			parentType: archTypeToString(parent.type_),
-			childType: archTypeToString(state?.type_),
-			patches,
-			inversePatches
-		})
+		// debugLog("Child finalization callback", {
+		// 	key,
+		// 	hasState: !!state,
+		// 	modified: state?.modified_,
+		// 	finalized: state?.finalized_,
+		// 	parentType: archTypeToString(parent.type_),
+		// 	childType: archTypeToString(state?.type_),
+		// 	patches,
+		// 	inversePatches
+		// })
 
 		if (!state) {
 			// debugLog(
@@ -300,7 +303,7 @@ export function registerChildFinalizationCallback(
 		}
 
 		if (state.finalized_) {
-			debugLog("Child already finalized, skipping finalization callback.", key)
+			// debugLog("Child already finalized, skipping finalization callback.", key)
 			return
 		}
 
@@ -342,9 +345,11 @@ export function registerChildFinalizationCallback(
 
 			// debugLog("Updating array child: ", {
 			// 	key,
-			// 	parentCopy,
-			// 	currentIndex
+			// 	updatedKey,
+			// 	parentCopy
 			// })
+		}
+
 		if (parent.type_ === ArchType.Map) {
 			const currentValue = get(parentCopy, key)
 
@@ -365,26 +370,24 @@ export function registerChildFinalizationCallback(
 
 		const childCopy = get(parentCopy, updatedKey)
 
-		debugLog("Finalize callback", {key, parent, child, childCopy})
+		// debugLog("Finalize callback", {key, parent, child, childCopy})
 
 		// Unmodified draft, return the (frozen) original
 		if (!state.modified_) {
-			debugLog("State not modified: ", state)
-
 			const currentValue = get(parentCopy, updatedKey)
 			const isMultipleReference =
 				currentValue === state.draft_ && state.base_ !== currentValue
 
-			debugLog(
-				"State not modified: ",
-				inspectDeep({
-					state,
-					currentValue,
-					key,
-					updatedKey,
-					isMultipleReference
-				})
-			)
+			// debugLog(
+			// 	"State not modified: ",
+			// 	inspectDeep({
+			// 		state,
+			// 		currentValue,
+			// 		key,
+			// 		updatedKey,
+			// 		isMultipleReference
+			// 	})
+			// )
 
 			if (currentValue === state.draft_ || currentValue === state) {
 				set(parentCopy, updatedKey, state.base_)
@@ -452,7 +455,7 @@ function finalizeWithPatches(
 		if (patches && inversePatches) {
 			const patchPlugin = getPlugin("Patches")
 			const basePath = patchPlugin.getPath(state)
-			debugLog("Generating patches for finalized child", {basePath})
+			// debugLog("Generating patches for finalized child", {basePath})
 			if (basePath) {
 				patchPlugin.generatePatches_(state, basePath, patches, inversePatches)
 			}

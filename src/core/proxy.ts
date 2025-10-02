@@ -423,11 +423,11 @@ export function createMethodInterceptor(
 					return latest(state)[method](...args)
 			}
 		} finally {
-			debugLog("Exiting bulk operation mode", {
-				method,
-				base: state.base_,
-				copy: state.copy_
-			})
+			// debugLog("Exiting bulk operation mode", {
+			// 	method,
+			// 	base: state.base_,
+			// 	copy: state.copy_
+			// })
 			// Always exit bulk operation mode
 			exitBulkOperation(state)
 		}
@@ -560,7 +560,7 @@ export function finalizeAssigned(
 	const copy = state.copy_
 	const wasAssigned: boolean =
 		get((state as Exclude<ImmerState, SetState>).assigned_!, key) ?? false
-	debugLog("finalizeAssigned", {key, copy, state, wasAssigned})
+	// debugLog("finalizeAssigned", {key, copy, state, wasAssigned})
 
 	if (rootScope.drafts_.length > 1 && wasAssigned === true && state.copy_) {
 		handleValue(get(state.copy_, key), rootScope.handledSet_, rootScope)
