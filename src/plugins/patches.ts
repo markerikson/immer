@@ -191,19 +191,27 @@ export function enablePatches() {
 			const proxyDraft = getProxyDraft(get(parentCopy, state.key!))
 			const valueAtKey = get(parentCopy, state.key!)
 
-			// Check if the draft at the key is still this state
+			debugLog("Path bailout check: ", {
+				valueAtKey,
+				proxyDraft,
+				stateBase: state.base_
+			})
+
+			if (valueAtKey === undefined) {
+				return null
+			}
+
+			// Check if the value at the key is still related to this draft
+			// It should be either the draft itself, the base, or the copy
 			if (
-				valueAtKey === undefined ||
-				(proxyDraft != null && proxyDraft?.base_ !== state.base_)
+				valueAtKey !== state.draft_ &&
+				valueAtKey !== state.base_ &&
+				valueAtKey !== state.copy_
 			) {
-				debugLog("Key in parent no longer points to this state", {
-					//state,
-					proxyDraft,
-					proxyDraftBase: proxyDraft?.base_,
-					stateBase: state.base_,
-					parentCopy
-				})
-				return null // Draft moved or replaced
+				return null // Value was replaced with something else
+			}
+			if (proxyDraft != null && proxyDraft.base_ !== state.base_) {
+				return null // Different draft
 			}
 
 			// Step 3: Handle Set case specially

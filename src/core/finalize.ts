@@ -109,24 +109,9 @@ function finalizeAlternate(
 			}
 		}
 
-		const result = state.copy_
-
 		finalizeWithPatches(state, rootScope.patches_, rootScope.inversePatches_)
 
-		// Preserve existing patch generation logic
-		// if (path && rootScope.patches_) {
-		// 	debugLog("generating patches for finalized draft", {state})
-		// 	getPlugin("Patches").generatePatches_(
-		// 		state,
-		// 		path,
-		// 		rootScope.patches_,
-		// 		rootScope.inversePatches_!
-		// 	)
-		// }
-
 		// debugLog("Final result: ", util.inspect(result, {depth: Infinity}))
-
-		//state.finalized_ = true
 	}
 
 	return state.copy_
@@ -402,19 +387,6 @@ export function registerChildFinalizationCallback(
 		set(parentCopy, updatedKey, updatedValue)
 
 		finalizeWithPatches(state, patches, inversePatches)
-
-		// // Add patch generation here
-		// if (patches && inversePatches && rootScope.patches_) {
-		// 	const patchPlugin = getPlugin("Patches")
-		// 	const childPath = patchPlugin.getPath(state)
-
-		// 	debugLog("Generating patches for finalized child", {childPath})
-		// 	if (childPath !== null) {
-		// 		patchPlugin.generatePatches_(state, childPath, patches, inversePatches)
-		// 	}
-		// }
-
-		// state.finalized_ = true
 	})
 }
 
@@ -423,12 +395,6 @@ function finalizeWithPatches(
 	patches?: Patch[],
 	inversePatches?: Patch[]
 ) {
-	// const shouldFinalize =
-	// 	state.modified_ &&
-	// 	state.assigned_ &&
-	// 	state.assigned_.size > 0 &&
-	// 	!state.finalized_
-
 	const shouldFinalize =
 		state.modified_ &&
 		!state.finalized_ &&
