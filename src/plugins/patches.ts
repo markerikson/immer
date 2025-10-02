@@ -189,9 +189,13 @@ export function enablePatches() {
 			debugLog("getPath: checking key in parent", {state})
 			const parentCopy = state.parent_!.copy_ ?? state.parent_!.base_
 			const proxyDraft = getProxyDraft(get(parentCopy, state.key!))
+			const valueAtKey = get(parentCopy, state.key!)
 
 			// Check if the draft at the key is still this state
-			if (proxyDraft != null && proxyDraft?.base_ !== state.base_) {
+			if (
+				valueAtKey === undefined ||
+				(proxyDraft != null && proxyDraft?.base_ !== state.base_)
+			) {
 				debugLog("Key in parent no longer points to this state", {
 					//state,
 					proxyDraft,
