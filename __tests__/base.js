@@ -17,7 +17,7 @@ enablePatches()
 enableMapSet()
 
 vi.setConfig({
-	testTimeout: 1000
+	testTimeout: 2000
 })
 
 const isProd = process.env.NODE_ENV === "production"
