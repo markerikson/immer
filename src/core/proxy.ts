@@ -150,7 +150,9 @@ export const objectTraps: ProxyHandler<ProxyState> = {
 		// Assigned values are never drafted. This catches any drafts we created, too.
 		if (value === peek(state.base_, prop)) {
 			prepareCopy(state)
-			const childDraft = createProxy(state.scope_, value, state, prop)
+			const childKey = state.type_ === ArchType.Array ? Number(prop) : prop
+			const childDraft = createProxy(state.scope_, value, state, childKey)
+
 			return (state.copy_![prop as any] = childDraft)
 		}
 		return value
@@ -340,7 +342,7 @@ function executeArrayMethod<T>(
 
 function markAllIndicesReassigned(state: ProxyArrayState) {
 	for (let i = 0; i < state.copy_!.length; i++) {
-		state.assigned_!.set(i, true)
+		state.assigned_!.set(i.toString(), true)
 	}
 }
 

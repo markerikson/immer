@@ -101,8 +101,6 @@ function finalizeAlternate(
 	}
 	// REPLACE: Not finalized yet, use callback-based finalization
 	if (!state.finalized_) {
-		state.scope_.unfinalizedDrafts_--
-
 		// Execute all registered callbacks
 		if (state.callbacks_) {
 			while (state.callbacks_.length > 0) {
@@ -113,20 +111,22 @@ function finalizeAlternate(
 
 		const result = state.copy_
 
+		finalizeWithPatches(state, rootScope.patches_, rootScope.inversePatches_)
+
 		// Preserve existing patch generation logic
-		if (path && rootScope.patches_) {
-			debugLog("generating patches for finalized draft", {state})
-			getPlugin("Patches").generatePatches_(
-				state,
-				path,
-				rootScope.patches_,
-				rootScope.inversePatches_!
-			)
-		}
+		// if (path && rootScope.patches_) {
+		// 	debugLog("generating patches for finalized draft", {state})
+		// 	getPlugin("Patches").generatePatches_(
+		// 		state,
+		// 		path,
+		// 		rootScope.patches_,
+		// 		rootScope.inversePatches_!
+		// 	)
+		// }
 
 		// debugLog("Final result: ", util.inspect(result, {depth: Infinity}))
 
-		state.finalized_ = true
+		//state.finalized_ = true
 	}
 
 	return state.copy_
@@ -401,19 +401,47 @@ export function registerChildFinalizationCallback(
 
 		set(parentCopy, updatedKey, updatedValue)
 
-		// Add patch generation here
-		if (patches && inversePatches && rootScope.patches_) {
-			const patchPlugin = getPlugin("Patches")
-			const childPath = patchPlugin.getPath(state)
+		finalizeWithPatches(state, patches, inversePatches)
 
-			debugLog("Generating patches for finalized child", {childPath})
-			if (childPath !== null) {
-				patchPlugin.generatePatches_(state, childPath, patches, inversePatches)
+		// // Add patch generation here
+		// if (patches && inversePatches && rootScope.patches_) {
+		// 	const patchPlugin = getPlugin("Patches")
+		// 	const childPath = patchPlugin.getPath(state)
+
+		// 	debugLog("Generating patches for finalized child", {childPath})
+		// 	if (childPath !== null) {
+		// 		patchPlugin.generatePatches_(state, childPath, patches, inversePatches)
+		// 	}
+		// }
+
+		// state.finalized_ = true
+	})
+}
+
+function finalizeWithPatches(
+	state: ImmerState,
+	patches?: Patch[],
+	inversePatches?: Patch[]
+) {
+	const shouldFinalize =
+		state.modified_ &&
+		state.assigned_ &&
+		state.assigned_.size > 0 &&
+		!state.finalized_
+
+	if (shouldFinalize) {
+		if (patches && inversePatches) {
+			const patchPlugin = getPlugin("Patches")
+			const basePath = patchPlugin.getPath(state)
+			debugLog("Generating patches for finalized child", {basePath})
+			if (basePath) {
+				patchPlugin.generatePatches_(state, basePath, patches, inversePatches)
 			}
 		}
-
 		state.finalized_ = true
-	})
+
+		state.scope_.unfinalizedDrafts_--
+	}
 }
 
 function getDraft(value: any): ImmerState | null {

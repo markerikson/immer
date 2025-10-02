@@ -26,6 +26,11 @@ export const debugLogger: typeof console.log = (...args) => {
 
 export const debugLog = noop
 
+export function getProxyDraft<T extends any>(value: T): ImmerState | null {
+	if (typeof value !== "object") return null
+	return (value as {[DRAFT_STATE]: any})?.[DRAFT_STATE]
+}
+
 /** Returns true if the given value is an Immer draft */
 /*#__PURE__*/
 export function isDraft(value: any): boolean {

@@ -22,8 +22,14 @@ import {
 	NOTHING,
 	errors,
 	debugLog,
-	DRAFT_STATE
+	DRAFT_STATE,
+	getProxyDraft
 } from "../internal"
+import util from "util"
+
+function inspectDeep(value: any) {
+	return util.inspect(value, {depth: Infinity})
+}
 
 export function enablePatches() {
 	const errorOffset = 16
@@ -92,6 +98,7 @@ export function enablePatches() {
 	}
 	*/
 
+	/*
 	function getPath(state: ImmerState): PatchPath | null {
 		const path: PatchPath = []
 		let current: ImmerState | undefined = state
@@ -164,10 +171,72 @@ export function enablePatches() {
 		// VALIDATION 4: Verify path can be resolved
 		if (path.length > 0) {
 			try {
-				resolvePath(state.copy_ || state.base_, path)
+				debugLog("Resolving path: ", path)
+				resolvePath(state.copy_, path)
 			} catch (e) {
+				debugLog("Failed to resolve path: ", e)
 				return null // ← PATH IS INVALID - can't resolve
 			}
+		}
+
+		return path
+	}*/
+
+	function getPath(state: ImmerState, path: PatchPath = []): PatchPath | null {
+		// Step 1: Check if state has a stored key
+		if (Object.hasOwnProperty.call(state, "key") && state.key !== undefined) {
+			// Step 2: Validate the key is still valid in parent
+			debugLog("getPath: checking key in parent", {state})
+			const parentCopy = state.parent_!.copy_ ?? state.parent_!.base_
+			const proxyDraft = getProxyDraft(get(parentCopy, state.key!))
+
+			// Check if the draft at the key is still this state
+			if (proxyDraft != null && proxyDraft?.base_ !== state.base_) {
+				debugLog("Key in parent no longer points to this state", {
+					//state,
+					proxyDraft,
+					proxyDraftBase: proxyDraft?.base_,
+					stateBase: state.base_,
+					parentCopy
+				})
+				return null // Draft moved or replaced
+			}
+
+			// Step 3: Handle Set case specially
+			const isSet = state.parent_!.type_ === ArchType.Set
+			let key: string | number
+
+			if (isSet) {
+				// For Sets, find the index in the drafts_ map
+				const setParent = state.parent_ as SetState
+				key = Array.from(setParent.drafts_.keys()).indexOf(state.key)
+			} else {
+				key = state.key as string | number
+			}
+
+			// Step 4: Validate key still exists in parent
+			if (!((isSet && parentCopy.size > key) || has(parentCopy, key))) {
+				return null // Key deleted
+			}
+
+			// Step 5: Add key to path
+			path.push(key)
+		}
+
+		// Step 6: Recurse to parent if exists
+		if (state.parent_) {
+			return getPath(state.parent_, path)
+		}
+
+		// Step 7: At root - reverse path and validate
+		path.reverse()
+
+		try {
+			// Validate path can be resolved from ROOT
+			debugLog("Resolving path: ", {state, path})
+			resolvePath(state.copy_, path)
+		} catch (e) {
+			return null // Path invalid
 		}
 
 		return path
@@ -180,6 +249,12 @@ export function enablePatches() {
 			const key = path[i]
 			current = get(current, key)
 			if (typeof current !== "object" || current === null) {
+				debugLog(
+					"Failed to resolve at segment:",
+					key,
+					"current:",
+					inspectDeep({current, base})
+				)
 				throw new Error(`Cannot resolve path at '${path.join("/")}'`)
 			}
 		}
@@ -192,22 +267,33 @@ export function enablePatches() {
 		patches: Patch[],
 		inversePatches: Patch[]
 	): void {
-		const fullPath = getPath(state)
+		// const fullPath = getPath(state)
 		debugLog("generatePatches_", {
 			state,
 			basePath,
 			patches,
-			inversePatches,
-			fullPath
+			inversePatches
+			// fullPath
 		})
 
-		if (state.finalized_) {
+		const shouldFinalize =
+			state.modified_ &&
+			state.assigned_ &&
+			state.assigned_.size > 0 &&
+			!state.finalized_
+
+		if (!shouldFinalize) {
+			debugLog("Skipping patch generation, nothing modified", state)
 			return
 		}
-		if (!state.modified_) {
-			// || state.finalized_) {
-			return
-		}
+
+		// if (state.finalized_) {
+		// 	return
+		// }
+		// if (!state.modified_) {
+		// 	// || state.finalized_) {
+		// 	return
+		// }
 
 		if (state.scope_.processedForPatches.has(state)) {
 			debugLog("Skipping already processed state for patches", state)
@@ -255,9 +341,26 @@ export function enablePatches() {
 			;[patches, inversePatches] = [inversePatches, patches]
 		}
 
+		debugLog(
+			"Generating array patch: ",
+			util.inspect(
+				{
+					base: state.base_,
+					copy: state.copy_,
+					assigned: state.assigned_
+				},
+				{depth: Infinity}
+			)
+		)
+
 		// Process replaced indices.
 		for (let i = 0; i < base_.length; i++) {
-			if (assigned_?.get(i) && copy_[i] !== base_[i]) {
+			if (assigned_?.get(i.toString()) && copy_[i] !== base_[i]) {
+				const childState = copy_[i]?.[DRAFT_STATE]
+				if (childState && childState.modified_) {
+					// Skip - let the child generate its own patches
+					continue
+				}
 				const path = basePath.concat([i])
 				patches.push({
 					op: REPLACE,
