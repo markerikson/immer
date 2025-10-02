@@ -319,19 +319,24 @@ export function registerChildFinalizationCallback(
 
 		if (
 			parent.type_ === ArchType.Array &&
-			typeof key === "string" &&
-			reNumericIndex.test(key)
+			(typeof key === "string" || typeof key === "number") &&
+			(typeof key === "number" || reNumericIndex.test(key))
 		) {
 			const array = parentCopy as any[]
 
-			const originalIndex = parseInt(key)
+			const originalIndex = typeof key === "string" ? parseInt(key) : key
 
-			if (array[originalIndex] === state.draft_) {
+			if (
+				array[originalIndex] === state.draft_ ||
+				array[originalIndex] === state
+			) {
 				// Fast path: still at original position
 				updatedKey = originalIndex
 			} else {
 				// Slow path: only search when position has changed
-				const currentIndex = array.findIndex(item => item === state.draft_)
+				const currentIndex = array.findIndex(
+					item => item === state.draft_ || item === state
+				)
 				updatedKey = currentIndex !== -1 ? currentIndex : originalIndex
 			}
 
@@ -354,10 +359,36 @@ export function registerChildFinalizationCallback(
 			const isMultipleReference =
 				currentValue === state.draft_ && state.base_ !== currentValue
 
-			if (isMultipleReference) {
+			debugLog(
+				"State not modified: ",
+				inspectDeep({
+					state,
+					currentValue,
+					key,
+					updatedKey,
+					isMultipleReference
+				})
+			)
+
+			if (currentValue === state.draft_ || currentValue === state) {
 				set(parentCopy, updatedKey, state.base_)
 			}
+
+			// const proxyDraft = getProxyDraft(currentValue)
+			// if (proxyDraft != null) {
+			// 	set(parentCopy, updatedKey, state.base_)
 			// }
+
+			// if (isMultipleReference) {
+			// 	set(parentCopy, updatedKey, state.base_)
+			// }
+
+			// if (currentValue === state.draft_) {
+			// 	set(parentCopy, updatedKey, state.base_)
+			// }
+
+			state.scope_.unfinalizedDrafts_--
+			state.finalized_ = true
 
 			return
 		}
